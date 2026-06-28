@@ -1,0 +1,10 @@
+{
+  "//": "型検査専用。ビルド用 tsconfig.json と違いテスト(src/**/*.test.ts)も含めて型検査する。emit はしない。",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "src"
+  },
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"]
+}

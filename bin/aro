@@ -1,0 +1,25 @@
+#!/usr/bin/env node
+// ai-repo-ops のグローバル実行入口。
+// ビルド済み CLI (packages/aro-cli/dist/cli.js) を読み込んで実行する。
+// `pnpm link --global` でこのファイルが `aro` として公開される。
+import { existsSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const cliUrl = new URL("../packages/aro-cli/dist/cli.js", import.meta.url);
+
+import(cliUrl.href).catch((error) => {
+  // ビルド成果物 cli.js 自体が無い時だけ「ビルドして」と案内する。
+  // cli.js は在るのに依存解決や import で失敗した場合は元エラーをそのまま見せる
+  // （commander 不足・import typo 等を「ビルド成果物が無い」と誤診断しないため）。
+  if (!existsSync(fileURLToPath(cliUrl))) {
+    process.stderr.write(
+      "aro: ビルド成果物 (packages/aro-cli/dist/cli.js) が見つかりません。先に `pnpm build` を実行してください。\n",
+    );
+    process.exitCode = 1;
+    return;
+  }
+  process.stderr.write(
+    `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+  );
+  process.exitCode = 1;
+});

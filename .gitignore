@@ -1,0 +1,19 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+*.tsbuildinfo
+
+# test / coverage
+coverage/
+
+# logs
+*.log
+
+# local agent / editor settings (個人ローカル設定。共有しない)
+# 利用者のグローバル gitignore に依存せず、repo 単体で誤コミット/誤配布を防ぐ。
+.claude/settings.local.json
+
+# OS
+.DS_Store
