@@ -74,3 +74,35 @@ export class PathSafetyError extends AroError {
     this.offendingPath = offendingPath;
   }
 }
+
+/**
+ * manifest（distribution/<name>/manifest.yaml）の読み込み・検証に失敗したときのエラー。
+ * 計画 §9.4 の validation rules・§17.2 の「validation error は exit code 1」に対応する。
+ * zod の検証失敗・YAML parse 失敗・path safety 違反をすべてこのクラスに集約する。
+ */
+export class ManifestError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}
+
+/**
+ * lock file（.ai/ai-repo-ops.lock.yaml）の読み込み・検証に失敗したときのエラー。
+ * 計画 §11 の lock file 仕様・doctor の lock schema 検証に対応する。
+ */
+export class LockFileError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}
+
+/**
+ * ai-repo-ops source / distribution の解決・読み込みに失敗したときのエラー。
+ * source root が見つからない、distribution ディレクトリや manifest が無い、
+ * manifest が参照する src/template ファイルが存在しない、などに対応する（計画 §17.1 step 3-6）。
+ */
+export class SourceError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}

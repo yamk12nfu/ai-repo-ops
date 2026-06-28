@@ -90,6 +90,26 @@ export async function canonicalSha256OfFile(absolutePath: string): Promise<strin
 }
 
 /**
+ * root 配下の相対 path から安全にファイルを読み込む高レベル API（symlink 非追従）。
+ *
+ * source distribution の src/template など untrusted な相対 path の読み取りに使う。
+ * {@link resolveWithinRoot}（traversal / 絶対 path / 予約名拒否）と
+ * {@link assertNoSymlinkInPath}（symlink 非追従、§20.2「source distribution 内の symlink も error」）を
+ * 通したうえで読み込む。存在しなければ null を返す。
+ *
+ * @returns 読み込んだ Buffer。ファイルが存在しなければ null。
+ */
+export async function readFileWithinRoot(
+  rootDir: string,
+  relativePath: string,
+  label = "path",
+): Promise<Buffer | null> {
+  const absolutePath = resolveWithinRoot(rootDir, relativePath, label);
+  await assertNoSymlinkInPath(rootDir, relativePath, label);
+  return readFileIfExists(absolutePath);
+}
+
+/**
  * root からの相対 path の各構成要素に symlink が無いことを検証する。
  *
  * MVP では symlink を一切追従しない（計画 §20.2「対象 path または親 path に symlink がある場合は error」）。
