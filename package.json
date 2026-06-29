@@ -16,6 +16,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "aro": "node bin/aro"
+    "aro": "node bin/aro",
+    "schema:sync": "node scripts/sync-managed-schema.mjs",
+    "schema:check": "node scripts/sync-managed-schema.mjs --check"
   }
 }

@@ -1,0 +1,38 @@
+# ai-repo-ops managed policy: default
+# 直接編集しないでください（変更は中央 ai-repo-ops 側で行います）。
+# risk_level: medium のリポジトリ向けの既定ポリシー。
+
+schema_version: 1
+name: default
+description: medium リスク向けの標準ポリシー。安全側に倒しつつ通常の改善を許可する。
+
+change_limits:
+  max_changed_files: 10
+  max_added_lines: 400
+
+review:
+  require_human_review: true
+  auto_merge: false
+  block_on:
+    - failing_required_gates
+    - secret_detected
+    - forbidden_path_modified
+    - managed_file_edited
+
+allowed_actions:
+  - fix_bug
+  - add_test
+  - update_docs
+  - refactor_safe
+
+forbidden_paths:
+  - ".env"
+  - ".env.*"
+  - "secrets/**"
+  - "infra/prod/**"
+  - ".github/workflows/**"
+
+quality_gates:
+  required:
+    - lint
+    - test

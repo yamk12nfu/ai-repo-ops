@@ -1,0 +1,80 @@
+schema_version: 1
+name: base
+version: 0.1.0
+
+files:
+  - src: files/.ai/managed/prompts/review.md
+    dest: .ai/managed/prompts/review.md
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/prompts/improve.md
+    dest: .ai/managed/prompts/improve.md
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/prompts/issue-fix.md
+    dest: .ai/managed/prompts/issue-fix.md
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/prompts/release-check.md
+    dest: .ai/managed/prompts/release-check.md
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/policies/default.yaml
+    dest: .ai/managed/policies/default.yaml
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/policies/low-risk.yaml
+    dest: .ai/managed/policies/low-risk.yaml
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/policies/security.yaml
+    dest: .ai/managed/policies/security.yaml
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/schemas/project.schema.json
+    dest: .ai/managed/schemas/project.schema.json
+    strategy: managed_overwrite
+
+seed_files:
+  - dest: .ai/project.yaml
+    template: project.yaml.hbs
+    strategy: create_only
+
+  - src: files/.github/workflows/ai-review.yml
+    dest: .github/workflows/ai-review.yml
+    strategy: create_only
+
+  - src: files/.github/workflows/ai-improve.yml
+    dest: .github/workflows/ai-improve.yml
+    strategy: create_only
+
+patches:
+  - type: append_unique_lines
+    path: .gitignore
+    lines:
+      - .ai/runs/
+      - .ai/tmp/
+      - .ai/logs/
+
+  - type: append_unique_lines
+    path: .gitattributes
+    lines:
+      - "# ai-repo-ops managed text files"
+      - ".ai/managed/** text eol=lf"
+      - ".ai/project.yaml text eol=lf"
+      - ".ai/ai-repo-ops.lock.yaml text eol=lf"
+      - ".github/workflows/ai-*.yml text eol=lf"
+
+  - type: append_unique_lines
+    path: .prettierignore
+    lines:
+      - "# ai-repo-ops managed files"
+      - ".ai/managed/"
+      - ".ai/ai-repo-ops.lock.yaml"
+
+preserve:
+  - .ai/project.yaml
+  - .ai/local/**
+  - .env
+  - .env.*
+  - secrets/**

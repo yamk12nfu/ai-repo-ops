@@ -1,0 +1,36 @@
+# ai-repo-ops managed policy: low-risk
+# 直接編集しないでください（変更は中央 ai-repo-ops 側で行います）。
+# risk_level: low のリポジトリ向け。実験的 / 影響範囲の小さい repo を想定し緩める。
+
+schema_version: 1
+name: low-risk
+description: low リスク向けポリシー。変更上限を広げ、安全なリファクタを許可する。
+
+change_limits:
+  max_changed_files: 25
+  max_added_lines: 1000
+
+review:
+  require_human_review: true
+  auto_merge: false
+  block_on:
+    - failing_required_gates
+    - secret_detected
+    - forbidden_path_modified
+
+allowed_actions:
+  - fix_bug
+  - add_test
+  - update_docs
+  - refactor_safe
+  - refactor_broad
+  - dependency_bump_patch
+
+forbidden_paths:
+  - ".env"
+  - ".env.*"
+  - "secrets/**"
+
+quality_gates:
+  required:
+    - test

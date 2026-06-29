@@ -287,7 +287,7 @@ ai-repo-ops/
     lockfile.schema.json             # docs用。実装はzodでもよい。
 
   scripts/
-    sync-managed-schema.ts           # schemas/project.schema.json を distribution配布コピーへ同期する。
+    sync-managed-schema.mjs          # schemas/project.schema.json を distribution配布コピーへ同期する（Node 20+ で動く plain ESM。tsx/型剥がし不要）。
     compute-distribution-hash.ts     # CI/docs用のcontent hash確認補助。
 
   packages/

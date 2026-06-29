@@ -1,0 +1,41 @@
+# ai-repo-ops managed policy: security
+# 直接編集しないでください（変更は中央 ai-repo-ops 側で行います）。
+# risk_level: high / セキュリティ重要 repo 向け。最も厳しい制約を適用する。
+
+schema_version: 1
+name: security
+description: high リスク向けの厳格ポリシー。変更を最小に抑え、人間レビューを必須にする。
+
+change_limits:
+  max_changed_files: 5
+  max_added_lines: 150
+
+review:
+  require_human_review: true
+  auto_merge: false
+  block_on:
+    - failing_required_gates
+    - secret_detected
+    - forbidden_path_modified
+    - managed_file_edited
+    - dependency_added
+    - public_api_changed
+
+allowed_actions:
+  - fix_bug
+  - add_test
+
+forbidden_paths:
+  - ".env"
+  - ".env.*"
+  - "secrets/**"
+  - "infra/**"
+  - ".github/workflows/**"
+  - "**/Dockerfile"
+  - "**/*.tf"
+
+quality_gates:
+  required:
+    - lint
+    - typecheck
+    - test

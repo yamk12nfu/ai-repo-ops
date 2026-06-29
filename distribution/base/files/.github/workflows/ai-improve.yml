@@ -1,0 +1,19 @@
+name: AI Improve
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * 1"
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai_improve:
+    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-improve.reusable.yml@v1
+    with:
+      config_path: ".ai/project.yaml"
+      lock_path: ".ai/ai-repo-ops.lock.yaml"
+      mode: "maintenance"
