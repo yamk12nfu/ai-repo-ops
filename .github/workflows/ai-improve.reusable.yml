@@ -1,0 +1,37 @@
+name: Reusable AI Improve
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        required: true
+        type: string
+      lock_path:
+        required: false
+        type: string
+        default: ".ai/ai-repo-ops.lock.yaml"
+      mode:
+        required: false
+        type: string
+        default: "maintenance"
+
+jobs:
+  improve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print AI improve context
+        run: |
+          echo "AI Improve stub"
+          echo "config_path=${{ inputs.config_path }}"
+          echo "lock_path=${{ inputs.lock_path }}"
+          echo "mode=${{ inputs.mode }}"
+
+      - name: Validate config presence
+        run: |
+          test -f "${{ inputs.config_path }}"

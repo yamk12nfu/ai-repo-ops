@@ -1,0 +1,32 @@
+name: Reusable AI Review
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        required: true
+        type: string
+      lock_path:
+        required: false
+        type: string
+        default: ".ai/ai-repo-ops.lock.yaml"
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Print AI review context
+        run: |
+          echo "AI Review stub"
+          echo "config_path=${{ inputs.config_path }}"
+          echo "lock_path=${{ inputs.lock_path }}"
+
+      - name: Validate config presence
+        run: |
+          test -f "${{ inputs.config_path }}"
