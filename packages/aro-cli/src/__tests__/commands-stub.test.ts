@@ -18,13 +18,13 @@ describe("未実装 stub コマンドの終了コード", () => {
 
   it("notImplemented は stderr に通知し非ゼロ終了コードを設定する", () => {
     const stderr = vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    notImplemented("init", "Phase 5");
+    notImplemented("doctor", "Phase 6");
     expect(process.exitCode).toBe(EXIT_NOT_IMPLEMENTED);
     expect(stderr).toHaveBeenCalledOnce();
   });
 
-  // diff は Phase 4 で実装済みのため stub 一覧から外す（diff の検証は diff.test.ts）。
-  for (const name of ["init", "sync", "doctor"] as const) {
+  // diff / init / sync は実装済みのため stub 一覧から外す（検証は各 *.test.ts）。doctor のみ Phase 6 で実装予定。
+  for (const name of ["doctor"] as const) {
     it(`aro ${name} は成功(0)ではなく非ゼロで終了する`, async () => {
       vi.spyOn(process.stderr, "write").mockReturnValue(true);
       await run(["node", "aro", name]);
