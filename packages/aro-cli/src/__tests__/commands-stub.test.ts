@@ -23,17 +23,12 @@ describe("未実装 stub コマンドの終了コード", () => {
     expect(stderr).toHaveBeenCalledOnce();
   });
 
-  for (const name of ["init", "diff", "sync", "doctor"] as const) {
+  // diff は Phase 4 で実装済みのため stub 一覧から外す（diff の検証は diff.test.ts）。
+  for (const name of ["init", "sync", "doctor"] as const) {
     it(`aro ${name} は成功(0)ではなく非ゼロで終了する`, async () => {
       vi.spyOn(process.stderr, "write").mockReturnValue(true);
       await run(["node", "aro", name]);
       expect(process.exitCode).toBe(EXIT_NOT_IMPLEMENTED);
     });
   }
-
-  it("diff --detailed-exitcode でも stub は 0(差分なし)を返さない", async () => {
-    vi.spyOn(process.stderr, "write").mockReturnValue(true);
-    await run(["node", "aro", "diff", "--detailed-exitcode"]);
-    expect(process.exitCode).not.toBe(0);
-  });
 });
