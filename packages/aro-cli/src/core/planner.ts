@@ -11,6 +11,7 @@
 import { classifyCreateOnly, classifyManagedOverwrite } from "./conflict.js";
 import { computeAppendUniqueLines } from "./append-unique-lines.js";
 import { canonicalSha256 } from "./checksum.js";
+import { LockFileError } from "./errors.js";
 import { readFileWithinRoot } from "./filesystem.js";
 import type { LoadedDistribution } from "./source.js";
 import type { LockFile } from "./lockfile.js";
@@ -146,6 +147,32 @@ function planOrphans(input: BuildSyncPlanInput): SyncChange[] {
   return changes;
 }
 
+/**
+ * lock に記録された distribution と、今回指定された distribution が一致することを検証する。
+ *
+ * MVP は単一 distribution 前提（§2.3 非ゴール）。base で初期化済みの repo に別 distribution を
+ * 指定して sync/diff すると、意図しない distribution 切り替え（managed file の総入れ替え）が
+ * 静かに起きうるため、apply へ進む前に validation error で止める。lock 無し（未 init）は対象外。
+ *
+ * @throws {LockFileError} lock の distribution と指定 distribution が食い違う場合（`LOCK_DISTRIBUTION_MISMATCH`）。
+ */
+function assertLockDistributionMatches(input: BuildSyncPlanInput): void {
+  if (input.lock === null) {
+    return;
+  }
+  const requested = input.distribution.location.distribution;
+  const locked = input.lock.source.distribution;
+  if (locked !== requested) {
+    throw new LockFileError(
+      "LOCK_DISTRIBUTION_MISMATCH",
+      `対象 repo は distribution "${locked}" で初期化済みですが、"${requested}" が指定されました。`,
+      {
+        hint: "MVP では distribution の切り替えに未対応です。--distribution を lock（.ai/ai-repo-ops.lock.yaml）と一致させてください。",
+      },
+    );
+  }
+}
+
 /** change を (path, kind) 昇順で安定ソートする（diff / JSON 出力の決定性のため）。 */
 function sortChanges(changes: SyncChange[]): SyncChange[] {
   return [...changes].sort((a, b) => {
@@ -167,6 +194,8 @@ function sortChanges(changes: SyncChange[]): SyncChange[] {
  * @throws {import("./errors.js").PathSafetyError} 対象 repo 配下に symlink 構成要素がある場合など。
  */
 export async function buildSyncPlan(input: BuildSyncPlanInput): Promise<SyncPlan> {
+  assertLockDistributionMatches(input);
+
   const lockByPath = new Map<string, string>(
     (input.lock?.managed_files ?? []).map((m) => [m.path, m.installed_sha256]),
   );

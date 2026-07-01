@@ -323,3 +323,17 @@ describe("buildSyncPlan: lock が null（未 init）", () => {
     expect(plan.currentDistributionSha256).toBeNull();
   });
 });
+
+describe("buildSyncPlan: distribution 不一致", () => {
+  it("lock の distribution と指定 distribution が違えば LOCK_DISTRIBUTION_MISMATCH", async () => {
+    await setupBaseDistribution(sourceRoot);
+    const dist = await loadDistribution(sourceRoot, "base");
+    const lock = await seedRepoAsSynced(repoRoot, dist);
+    // lock は "base" で記録されているのに、別 distribution を指定したとみなす。
+    const tamperedLock = { ...lock, source: { ...lock.source, distribution: "experimental" } };
+
+    await expect(
+      buildSyncPlan({ repoRoot, distribution: dist, lock: tamperedLock }),
+    ).rejects.toMatchObject({ code: "LOCK_DISTRIBUTION_MISMATCH" });
+  });
+});

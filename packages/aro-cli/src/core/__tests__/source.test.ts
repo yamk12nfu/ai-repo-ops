@@ -65,6 +65,23 @@ patches:
   await writeSourceFile("distribution/base/manifest.yaml", manifestYaml ?? defaultManifest);
 }
 
+describe("loadDistribution: manifest.name とディレクトリ名の一致", () => {
+  it("manifest.name が distribution ディレクトリ名と違うと DISTRIBUTION_NAME_MISMATCH", async () => {
+    const mismatched = `schema_version: 1
+name: notbase
+version: 0.1.0
+files: []
+seed_files: []
+patches: []
+preserve: []
+`;
+    await setupBaseDistribution(mismatched);
+    await expect(loadDistribution(sourceRoot, "base")).rejects.toMatchObject({
+      code: "DISTRIBUTION_NAME_MISMATCH",
+    });
+  });
+});
+
 describe("resolveSourceRoot", () => {
   it("明示 source に distribution/ があればそれを返す", async () => {
     await setupBaseDistribution();

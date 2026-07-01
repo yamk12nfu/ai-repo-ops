@@ -4,12 +4,14 @@
  * init / sync はともにこの {@link applyPlan} を経由して実ファイルを書く。plan は「何をするか」を、
  * {@link import("./source.js").LoadedDistribution} は「書き込む内容」を持つので、両者を join して適用する。
  *
- * atomicity（MVP の 2 段保証）:
+ * atomicity（MVP の 2 段保証。計画 §0.2.6 / §17.3）:
  *   1. conflict atomicity（必須）: conflict があれば呼び出し前に abort する。applyPlan は
  *      防御として `plan.hasConflicts` を検査し、true なら何も書かずに throw する。
- *   2. I/O failure rollback: 全変更内容を **メモリ上で準備**（path 検証・symlink 検査・追記内容の確定）
- *      してから書き込みフェーズに入る。書き込み中の失敗は {@link ApplyIoError} に touched paths を載せて投げ、
- *      呼び出し側が git restore / 手動削除を案内できるようにする（自前 backup は持たない）。
+ *   2. I/O failure recovery（手動復旧導線。**自動 rollback ではない**）: 全変更内容を
+ *      **メモリ上で準備**（path 検証・symlink 検査・追記内容の確定）してから書き込みフェーズに入る。
+ *      書き込み中に失敗しても aro は元 bytes を復元しない（自前 backup/restore 機構は持たない）。
+ *      代わりに {@link ApplyIoError} に touched paths / new paths を載せて投げ、呼び出し側が
+ *      「既存ファイル= git restore / 新規ファイル= 削除」の復旧手順を案内できるようにする。
  *
  * 書き込み順序（§17.3）: 通常ファイル（managed / seed）→ patch 対象 → lock file。lock は必ず最後。
  *

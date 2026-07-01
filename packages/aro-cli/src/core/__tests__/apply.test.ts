@@ -1,4 +1,4 @@
-import { chmod, mkdir, readFile, rm } from "node:fs/promises";
+import { mkdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -176,38 +176,37 @@ describe("applyPlan: 防御", () => {
   });
 });
 
-describe("applyPlan: I/O 失敗", () => {
-  // root では permission が効かず write が成功してしまうため skip する。
-  const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+describe("applyPlan: I/O 失敗（自動 rollback しない = §0.2.6/§17.3）", () => {
+  it("lock 書き込み失敗時は ApplyIoError を投げ、先に書いた managed file は残る", async () => {
+    await setupBaseDistribution(sourceRoot);
+    const dist = await loadDistribution(sourceRoot, "base");
+    const plan = await buildSyncPlan({ repoRoot, distribution: dist, lock: null });
 
-  it.skipIf(isRoot)(
-    "書き込み失敗時は ApplyIoError に touched paths を載せて throw する",
-    async () => {
-      await setupBaseDistribution(sourceRoot);
-      const dist = await loadDistribution(sourceRoot, "base");
-      const plan = await buildSyncPlan({ repoRoot, distribution: dist, lock: null });
+    // lock file の path をディレクトリにして、最後の writeLockFile を EISDIR で確実に失敗させる。
+    // permission に依存しないため root でも決定的に失敗する（前実装の chmod 依存 skip を排除）。
+    await mkdir(path.join(repoRoot, LOCKFILE_RELATIVE_PATH), { recursive: true });
 
-      // 最初に書かれる managed file（.ai/managed/policies/default.yaml）の親ディレクトリを
-      // 書き込み不可にして、symlink 検査（prepare）は通過しつつ writeFile（書き込みフェーズ）を失敗させる。
-      const policiesDir = path.join(repoRoot, ".ai/managed/policies");
-      await mkdir(policiesDir, { recursive: true });
-      await chmod(policiesDir, 0o555);
-
-      let caught: unknown;
-      try {
-        await applyPlan({ plan, distribution: dist, repoRoot, existingLock: null, now: FIXED_TS });
-      } catch (error) {
-        caught = error;
-      } finally {
-        // afterEach の cleanup（rm）が書き込み権限を要するため戻す。
-        await chmod(policiesDir, 0o755);
-      }
-      expect(caught).toBeInstanceOf(ApplyIoError);
-      const ioError = caught as ApplyIoError;
-      expect(ioError.failedPath).toBe(".ai/managed/policies/default.yaml");
-      expect(ioError.touchedPaths).toContain(".ai/managed/policies/default.yaml");
-      // lock は最後に書くので、書き込み失敗時には書かれていない。
-      await expect(read(LOCKFILE_RELATIVE_PATH)).rejects.toBeTruthy();
-    },
-  );
+    let caught: unknown;
+    try {
+      await applyPlan({
+        plan,
+        distribution: dist,
+        repoRoot,
+        existingLock: null,
+        now: FIXED_TS,
+        repoName: "r",
+      });
+    } catch (error) {
+      caught = error;
+    }
+    expect(caught).toBeInstanceOf(ApplyIoError);
+    const ioError = caught as ApplyIoError;
+    // 失敗したのは最後の lock 書き込み。
+    expect(ioError.failedPath).toBe(LOCKFILE_RELATIVE_PATH);
+    // 通常ファイルは lock より先に書かれるので touched / new に含まれ、実際にディスクへ書かれている。
+    expect(ioError.touchedPaths).toContain(REVIEW_DEST);
+    expect(ioError.newPaths).toContain(REVIEW_DEST);
+    // 自動 rollback は行わないので、先に書かれた managed file は残る（手動復旧の対象）。
+    expect(await read(REVIEW_DEST)).toBe(REVIEW_CONTENT);
+  });
 });
