@@ -2,7 +2,7 @@
 
 AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。
 
-> ステータス: **Phase 0（リポジトリ初期化）**。CLI コマンド本体（`init` / `diff` / `sync` / `doctor`）は後続フェーズで実装する。現状は scaffold と各コマンドの stub のみ。
+> ステータス: **MVP Phase 5 実装中**。`aro init` / `aro diff` / `aro sync` は実装済み。`aro doctor` は Phase 6 で実装予定。
 
 ## Development
 
@@ -19,7 +19,29 @@ pnpm test           # vitest
 pnpm aro --help     # aro CLI のヘルプ（事前に pnpm build が必要）
 ```
 
-利用者向けの導入・運用手順（`pnpm link --global` での `aro` 公開、各コマンドの使い方、復旧手順など）は Phase 7 で README / `docs/` に拡充する。
+利用者向けの導入・運用手順（`pnpm link --global` での `aro` 公開、`docs/` への詳細な使い方・復旧手順など）は Phase 7 で拡充する。以下は MVP 時点の最小手順。
+
+## 使い方（MVP）
+
+対象の Git repo に対して次を実行する（`--source` 省略時は実行モジュール位置から `distribution/` を持つ ai-repo-ops source root を上方探索する）。
+
+```bash
+aro init --repo /path/to/your-repo   # 初回展開（.ai/ / workflow / lock を生成）
+aro diff --repo /path/to/your-repo   # 中央配布物との差分（実ファイルは変更しない）
+aro sync --repo /path/to/your-repo   # 中央配布物を適用（conflict があれば一切変更せず abort）
+```
+
+### 更新判定と conflict
+
+- 更新判定は version ではなく canonical checksum を正とする（CRLF / 先頭 BOM だけの差分は conflict にならない）。
+- `.ai/managed/**` は直接編集しない。人間が編集して conflict になった場合は `git restore -- <path>` で戻してから `aro sync` する。
+
+### I/O 失敗時の復旧（重要）
+
+MVP の `aro` は**自前の backup/restore（自動 rollback）を持たない**。書き込み中に I/O エラーが起きた場合は、`touched paths`（既存ファイルへの変更）と新規作成ファイルを表示し、手動復旧を案内する。
+
+- **`aro init` 後は、生成されたファイルを一度 git commit してから次回以降の `aro sync` を実行することを推奨する。** 生成ファイルが未 commit のまま I/O 失敗が起きると、`git restore` では復旧できない（git に元の版が無い）ことがある。
+- 失敗時は `git status` で touched paths を確認し、既存ファイルは `git restore -- <paths>`、部分生成された新規ファイルは削除（`rm -f <paths>`）してから `aro sync` を再実行する。
 
 ## Distribution boundary（MVP）
 

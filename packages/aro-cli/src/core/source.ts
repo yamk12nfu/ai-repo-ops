@@ -306,6 +306,18 @@ export async function loadDistribution(
   }
   const manifest = parseManifest(manifestValue, location.manifestPath);
 
+  // manifest.name は content hash payload の distribution 名として使われ、CLI 指定名・ディレクトリ名と
+  // 一致している必要がある。ズレると「CLI 指定 / ディレクトリ / hash 上の名前」が食い違い、lock との整合が崩れる。
+  if (manifest.name !== distribution) {
+    throw new SourceError(
+      "DISTRIBUTION_NAME_MISMATCH",
+      `manifest.name (${JSON.stringify(manifest.name)}) が distribution ディレクトリ名 (${JSON.stringify(distribution)}) と一致しません。`,
+      {
+        hint: `manifest.name を "${distribution}" にするか、distribution/<name>/ のディレクトリ名を manifest.name に合わせてください。`,
+      },
+    );
+  }
+
   const managedFiles: LoadedManagedFile[] = [];
   for (const file of manifest.files) {
     const { content, sha256 } = await readSourceFile(location, file.src, "files[].src");

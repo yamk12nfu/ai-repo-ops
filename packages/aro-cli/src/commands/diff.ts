@@ -9,7 +9,6 @@
  *   --detailed-exitcode:  0=差分なし / 1=validation error / 2=更新あり / 3=conflict / 4=unexpected
  */
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import type { Command } from "commander";
 
@@ -20,7 +19,9 @@ import { loadDistribution, resolveSourceRoot } from "../core/source.js";
 import { LOCKFILE_RELATIVE_PATH, loadLockFile } from "../core/lockfile.js";
 import { buildSyncPlan } from "../core/planner.js";
 import { planRequiresSync } from "../core/plan-summary.js";
+import { formatAroError } from "./cli-error.js";
 import { formatDiffHuman } from "./diff-format.js";
+import { defaultSourceStartDir } from "./source-context.js";
 
 /** diff の終了コード（§17.2）。通常モードと detailed モードで意味が変わる。 */
 export const DIFF_EXIT = {
@@ -70,15 +71,10 @@ function diffSuccessExitCode(plan: SyncPlan, detailed: boolean): number {
   return planRequiresSync(plan) ? DIFF_EXIT.conflictOrUpdate : DIFF_EXIT.ok;
 }
 
-/** source 上方探索の起点。実行中モジュールの位置から ai-repo-ops source root を辿れるようにする。 */
-function defaultStartDir(): string {
-  return path.dirname(fileURLToPath(import.meta.url));
-}
-
 /** lock file・source distribution を解決して sync plan を作る。 */
 async function computeDiffPlan(options: DiffOptions): Promise<SyncPlan> {
   const repoRoot = path.resolve(options.repo);
-  const sourceRoot = await resolveSourceRoot(options.source, defaultStartDir());
+  const sourceRoot = await resolveSourceRoot(options.source, defaultSourceStartDir());
   const distribution = await loadDistribution(sourceRoot, options.distribution);
   const lock = await loadLockFile(repoRoot);
   if (lock === null) {
@@ -91,15 +87,6 @@ async function computeDiffPlan(options: DiffOptions): Promise<SyncPlan> {
     );
   }
   return buildSyncPlan({ repoRoot, distribution, lock });
-}
-
-/** エラーを人間向け 1 メッセージへ整形する（AroError は hint も添える）。 */
-function formatError(error: unknown): string {
-  if (error instanceof AroError) {
-    const head = `ERROR ${error.message}`;
-    return error.hint !== undefined ? `${head}\n      ${error.hint}` : head;
-  }
-  return `ERROR ${error instanceof Error ? error.message : String(error)}`;
 }
 
 /**
@@ -117,7 +104,7 @@ export async function executeDiff(options: DiffOptions, io: DiffIo): Promise<num
     }
     return diffSuccessExitCode(plan, detailed);
   } catch (error) {
-    io.stderr(`${formatError(error)}\n`);
+    io.stderr(`${formatAroError(error)}\n`);
     if (error instanceof AroError) {
       return DIFF_EXIT.validation;
     }

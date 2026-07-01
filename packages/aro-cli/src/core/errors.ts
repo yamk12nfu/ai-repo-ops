@@ -106,3 +106,14 @@ export class SourceError extends AroError {
     super(code, message, options);
   }
 }
+
+/**
+ * 対象 repo の前提条件チェックに失敗したときのエラー（計画 §17.1）。
+ * 対象 path が存在しない / ディレクトリでない / Git repo でない、などに対応する。
+ * I/O failure rollback（§17.3）の起点でもあるため、復旧導線は呼び出し側 CLI が添える。
+ */
+export class RepoError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}

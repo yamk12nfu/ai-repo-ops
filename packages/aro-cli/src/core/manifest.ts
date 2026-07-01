@@ -28,8 +28,16 @@ const SEMVER_RE =
  * `.ai/project.yaml` だけは {@link PROJECT_YAML_PATH} として別扱いし、create_only seed のときだけ許可する。
  *
  * preserve は manifest 作者が任意に書ける一方、これは「漏れても安全」を保証する defense in depth。
+ * `.git/**` は §20.3 の明示リストには無いが、git 内部（hook/config 等）への配布は repo を破壊しうるため
+ * 同じ安全網に含める（apply は manifest 検証を信頼して書き込むため、ここで弾くのが最終防壁）。
  */
-export const ALWAYS_PRESERVED_PATTERNS = [".env", ".env.*", "secrets/**", ".ai/local/**"] as const;
+export const ALWAYS_PRESERVED_PATTERNS = [
+  ".env",
+  ".env.*",
+  "secrets/**",
+  ".ai/local/**",
+  ".git/**",
+] as const;
 
 /** create_only seed としてのみ許可される path（managed_overwrite / patch では保護される、§20.3）。 */
 export const PROJECT_YAML_PATH = ".ai/project.yaml";
@@ -40,9 +48,15 @@ interface ProtectedMatcher {
   isMatch: (target: string) => boolean;
 }
 
-/** glob pattern から {@link ProtectedMatcher} を作る。 */
+/**
+ * glob pattern から {@link ProtectedMatcher} を作る。
+ *
+ * `nocase: true` にして大文字小文字を無視する。macOS(APFS)/Windows(NTFS) など case-insensitive な
+ * ファイルシステムでは `.ENV` が `.env` に解決されるため、case 違いで保護 path 検査をすり抜けさせない
+ * （case-sensitive な Linux では `.ENV` を弾く過剰防御になるが、保護側に倒すのが安全）。
+ */
 function protectedMatcher(pattern: string): ProtectedMatcher {
-  return { pattern, isMatch: picomatch(pattern, { dot: true }) };
+  return { pattern, isMatch: picomatch(pattern, { dot: true, nocase: true }) };
 }
 
 /** create_only で許可する path（= ALWAYS_PRESERVED のみ。project.yaml は含めない）。 */
@@ -134,12 +148,24 @@ const seedFileEntrySchema = z
     }
   });
 
-/** patches[]（append_unique_lines）エントリ。 */
+/**
+ * patches[]（append_unique_lines）エントリ。
+ *
+ * lines は「行」単位で扱うため、各要素に改行文字（CR/LF）を含めることは禁止する。
+ * 埋め込み改行を許すと、append 時の行比較（canonical 化済み既存行 vs 生の候補行）が一致せず、
+ * sync のたびに同じ行が再追記されて冪等性が壊れる（無限増殖）。入力検証の段階で弾く。
+ */
 const patchEntrySchema = z
   .object({
     type: z.literal("append_unique_lines"),
     path: safeRelativePathSchema("patches[].path"),
-    lines: z.array(z.string()).min(1, "patches[].lines は 1 行以上必要です。"),
+    lines: z
+      .array(
+        z.string().refine((line) => !/[\r\n]/.test(line), {
+          message: "patches[].lines の各行に改行文字(CR/LF)を含めることはできません。",
+        }),
+      )
+      .min(1, "patches[].lines は 1 行以上必要です。"),
   })
   .strict();
 
@@ -200,6 +226,30 @@ export const manifestSchema = z
         });
       }
     }
+
+    // 配布先 path（files[].dest / seed_files[].dest / patches[].path）は全体で一意でなければならない。
+    // apply は dest をキーに source 内容を join する（managedByDest 等）ため、重複すると last-wins で
+    // 内容が静かに失われ、lock と実ファイルが食い違う。dest は正規化済みなので表記ゆれの重複も検出できる。
+    // key は小文字化する。case-insensitive FS（macOS/Windows）では `.ai/Foo.md` と `.ai/foo.md` が
+    // 同一ファイルに解決されるため、保護 path 検査（nocase）と思想を揃えて case 違いの衝突も弾く。
+    const seenTargets = new Map<string, string>();
+    const checkUniqueTarget = (target: unknown, slot: string, issuePath: string): void => {
+      if (typeof target !== "string") return;
+      const key = target.toLowerCase();
+      const previous = seenTargets.get(key);
+      if (previous !== undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `配布先 path "${target}" が重複しています（${previous} と ${slot}）。各 path は一意である必要があります（大文字小文字は区別しません）。`,
+          path: [issuePath],
+        });
+        return;
+      }
+      seenTargets.set(key, slot);
+    };
+    for (const file of value.files) checkUniqueTarget(file.dest, "files[].dest", "files");
+    for (const seed of value.seed_files) checkUniqueTarget(seed.dest, "seed_files[].dest", "seed_files");
+    for (const patch of value.patches) checkUniqueTarget(patch.path, "patches[].path", "patches");
 
     // §9.4: manifest の preserve に該当する path は managed_overwrite（files[].dest）対象にできない。
     // preserve は transform 済みで正規化されているため、表記ゆれでも dest と正しく突き合わせられる。

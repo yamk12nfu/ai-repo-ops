@@ -178,3 +178,82 @@ describe("parseManifest（固定保護 path §20.3 / 指摘1）", () => {
     expect(() => parseManifest(m)).toThrowError(/固定保護|§20\.3/);
   });
 });
+
+describe("parseManifest（防御強化: レビュー指摘対応）", () => {
+  it(".git/** への配布（managed_overwrite）を拒否する", () => {
+    const m = validManifest();
+    m["files"] = [{ src: "files/x", dest: ".git/hooks/post-checkout", strategy: "managed_overwrite" }];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/固定保護|§20\.3/);
+  });
+
+  it(".git/** への配布（create_only seed）を拒否する", () => {
+    const m = validManifest();
+    m["seed_files"] = [{ dest: ".git/config", src: "files/x", strategy: "create_only" }];
+    expect(() => parseManifest(m)).toThrowError(/固定保護|§20\.3/);
+  });
+
+  it("case 違い（.ENV）でも固定保護 path として拒否する（nocase）", () => {
+    const m = validManifest();
+    m["files"] = [{ src: "files/x", dest: ".ENV", strategy: "managed_overwrite" }];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/固定保護|§20\.3/);
+  });
+
+  it("case 違いの SECRETS/** も拒否する（nocase）", () => {
+    const m = validManifest();
+    m["files"] = [{ src: "files/x", dest: "SECRETS/key", strategy: "managed_overwrite" }];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/固定保護|§20\.3/);
+  });
+
+  it("patch 行に改行(LF)を含むと拒否する", () => {
+    const m = validManifest();
+    m["patches"] = [{ type: "append_unique_lines", path: ".gitignore", lines: ["a\nb"] }];
+    expect(() => parseManifest(m)).toThrowError(/改行/);
+  });
+
+  it("patch 行に CR を含むと拒否する", () => {
+    const m = validManifest();
+    m["patches"] = [{ type: "append_unique_lines", path: ".gitignore", lines: ["a\r"] }];
+    expect(() => parseManifest(m)).toThrowError(/改行/);
+  });
+
+  it("files[] 内で dest が重複すると拒否する", () => {
+    const m = validManifest();
+    m["files"] = [
+      { src: "files/a", dest: ".ai/managed/x.md", strategy: "managed_overwrite" },
+      { src: "files/b", dest: ".ai/managed/x.md", strategy: "managed_overwrite" },
+    ];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/重複|一意/);
+  });
+
+  it("正規化後に衝突する dest（.ai/x と ./.ai/x）を重複として拒否する", () => {
+    const m = validManifest();
+    m["files"] = [
+      { src: "files/a", dest: ".ai/managed/x.md", strategy: "managed_overwrite" },
+      { src: "files/b", dest: "./.ai/managed/x.md", strategy: "managed_overwrite" },
+    ];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/重複|一意/);
+  });
+
+  it("managed dest と seed dest が同じだと拒否する", () => {
+    const m = validManifest();
+    m["files"] = [{ src: "files/a", dest: ".ai/shared.md", strategy: "managed_overwrite" }];
+    m["seed_files"] = [{ dest: ".ai/shared.md", src: "files/b", strategy: "create_only" }];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/重複|一意/);
+  });
+
+  it("case 違いだけの dest（.ai/Foo.md と .ai/foo.md）も重複として拒否する", () => {
+    const m = validManifest();
+    m["files"] = [
+      { src: "files/a", dest: ".ai/managed/Foo.md", strategy: "managed_overwrite" },
+      { src: "files/b", dest: ".ai/managed/foo.md", strategy: "managed_overwrite" },
+    ];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/重複|一意/);
+  });
+});

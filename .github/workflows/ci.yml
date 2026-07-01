@@ -30,6 +30,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # authoritative schema と distribution 配布コピーの drift を検出する（手動 build 前でも走る plain ESM）。
+      - name: Check managed schema copy
+        run: pnpm schema:check
+
       - name: Typecheck
         run: pnpm typecheck
 

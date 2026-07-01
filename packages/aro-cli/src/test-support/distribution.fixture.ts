@@ -30,6 +30,15 @@ export async function makeTempDir(prefix: string): Promise<string> {
   return mkdtemp(path.join(tmpdir(), prefix));
 }
 
+/**
+ * 対象 repo を「Git repo の root」に見せかける（`.git` ディレクトリを作る）。
+ * init / sync は {@link import("../core/git.js").assertGitRepo} で `.git` の存在を要求するため、
+ * これらのテストでは事前にこのヘルパーを呼ぶ。`git` コマンドは実行しない。
+ */
+export async function initGitRepo(repoRoot: string): Promise<void> {
+  await mkdir(path.join(repoRoot, ".git"), { recursive: true });
+}
+
 /** root 配下にファイルを書く（親ディレクトリは作成。内容はそのまま=正規化しない）。 */
 export async function writeRaw(root: string, relPath: string, content: string): Promise<void> {
   const abs = path.join(root, relPath);
