@@ -292,6 +292,26 @@ describe("executeSync: --dry-run", () => {
     const code = await executeSync(options({ dryRun: true }), captureIo().io);
     expect(code).toBe(SYNC_EXIT.conflict);
   });
+
+  it("--json は ok を持つ（他の JSON 出力と一貫）。conflict なし=true / あり=false", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await seedSynced();
+    await writeRaw(sourceRoot, REVIEW_REL, REVIEW_CHANGED);
+
+    const okCap = captureIo();
+    expect(await executeSync(options({ dryRun: true, json: true }), okCap.io)).toBe(SYNC_EXIT.ok);
+    const okParsed = JSON.parse(okCap.out()) as { ok: boolean; dryRun: boolean };
+    expect(okParsed.ok).toBe(true);
+    expect(okParsed.dryRun).toBe(true);
+
+    // conflict を作ると ok=false・exit 2。
+    await writeRaw(repoRoot, REVIEW_DEST, `${REVIEW_CONTENT}LOCAL\n`);
+    const conflictCap = captureIo();
+    expect(await executeSync(options({ dryRun: true, json: true }), conflictCap.io)).toBe(
+      SYNC_EXIT.conflict,
+    );
+    expect((JSON.parse(conflictCap.out()) as { ok: boolean }).ok).toBe(false);
+  });
 });
 
 describe("executeSync: validation error", () => {

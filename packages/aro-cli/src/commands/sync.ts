@@ -87,7 +87,11 @@ export async function executeSync(options: SyncOptions, io: SyncIo): Promise<num
     // dry-run は純粋なプレビュー。書き込みはせず、conflict の有無を終了コードへ反映する。
     if (options.dryRun) {
       if (options.json) {
-        io.stdout(`${JSON.stringify({ command: "sync", dryRun: true, plan }, null, 2)}\n`);
+        // 他の JSON 出力（applied / conflict / up-to-date）と揃えて ok を持たせる。
+        // dry-run は conflict の有無を exit code に反映するため、ok も conflict 有無に合わせる。
+        io.stdout(
+          `${JSON.stringify({ command: "sync", ok: !plan.hasConflicts, dryRun: true, plan }, null, 2)}\n`,
+        );
       } else {
         io.stdout(`${formatDiffHuman(plan, { color: io.color })}\n\n(dry-run: ファイルは書き込まれていません)\n`);
       }

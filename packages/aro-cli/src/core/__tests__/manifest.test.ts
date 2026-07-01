@@ -246,4 +246,14 @@ describe("parseManifest（防御強化: レビュー指摘対応）", () => {
     m["preserve"] = [];
     expect(() => parseManifest(m)).toThrowError(/重複|一意/);
   });
+
+  it("case 違いだけの dest（.ai/Foo.md と .ai/foo.md）も重複として拒否する", () => {
+    const m = validManifest();
+    m["files"] = [
+      { src: "files/a", dest: ".ai/managed/Foo.md", strategy: "managed_overwrite" },
+      { src: "files/b", dest: ".ai/managed/foo.md", strategy: "managed_overwrite" },
+    ];
+    m["preserve"] = [];
+    expect(() => parseManifest(m)).toThrowError(/重複|一意/);
+  });
 });

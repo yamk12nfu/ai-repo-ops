@@ -230,19 +230,22 @@ export const manifestSchema = z
     // 配布先 path（files[].dest / seed_files[].dest / patches[].path）は全体で一意でなければならない。
     // apply は dest をキーに source 内容を join する（managedByDest 等）ため、重複すると last-wins で
     // 内容が静かに失われ、lock と実ファイルが食い違う。dest は正規化済みなので表記ゆれの重複も検出できる。
+    // key は小文字化する。case-insensitive FS（macOS/Windows）では `.ai/Foo.md` と `.ai/foo.md` が
+    // 同一ファイルに解決されるため、保護 path 検査（nocase）と思想を揃えて case 違いの衝突も弾く。
     const seenTargets = new Map<string, string>();
     const checkUniqueTarget = (target: unknown, slot: string, issuePath: string): void => {
       if (typeof target !== "string") return;
-      const previous = seenTargets.get(target);
+      const key = target.toLowerCase();
+      const previous = seenTargets.get(key);
       if (previous !== undefined) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: `配布先 path "${target}" が重複しています（${previous} と ${slot}）。各 path は一意である必要があります。`,
+          message: `配布先 path "${target}" が重複しています（${previous} と ${slot}）。各 path は一意である必要があります（大文字小文字は区別しません）。`,
           path: [issuePath],
         });
         return;
       }
-      seenTargets.set(target, slot);
+      seenTargets.set(key, slot);
     };
     for (const file of value.files) checkUniqueTarget(file.dest, "files[].dest", "files");
     for (const seed of value.seed_files) checkUniqueTarget(seed.dest, "seed_files[].dest", "seed_files");
