@@ -80,6 +80,20 @@ async function readTargetText(repoRoot: string, relPath: string, label: string):
   return buffer === null ? null : buffer.toString("utf8");
 }
 
+/**
+ * 例外から DoctorCheck.hint 用の文字列を取り出す。
+ *
+ * `AroError` は `hint`（無ければ `message`）を使う。`loadLockFile` / `buildSyncPlan` が
+ * `AroError` 以外の想定外エラー（I/O エラー・バグ等）を投げた場合でも `message` を fallback として使い、
+ * 「failed validation」「could not be computed」としか表示されず実際の原因が分からなくなる事態を防ぐ。
+ */
+function errorHint(error: unknown): string | undefined {
+  if (error instanceof AroError) {
+    return error.hint ?? error.message;
+  }
+  return error instanceof Error ? error.message : undefined;
+}
+
 /** Repository: `.git` エントリの有無で Git repo root かどうかを判定する（§17.4 Repository）。 */
 async function checkGitRepo(repoRoot: string): Promise<DoctorCheck> {
   try {
@@ -206,7 +220,7 @@ async function checkLockFile(repoRoot: string): Promise<{ checks: DoctorCheck[];
           id: "lock.schema",
           status: "fail",
           message: `${LOCKFILE_RELATIVE_PATH} failed validation`,
-          hint: error instanceof AroError ? (error.hint ?? error.message) : undefined,
+          hint: errorHint(error),
         },
       ],
     };
@@ -238,7 +252,7 @@ async function checkSyncPlanDerived(
       id: "sync-plan",
       status: "fail",
       message: "sync plan could not be computed (lock / manifest may be inconsistent)",
-      hint: error instanceof AroError ? (error.hint ?? error.message) : undefined,
+      hint: errorHint(error),
     });
     return checks;
   }
@@ -356,8 +370,15 @@ function expectedReusableWorkflowRef(reusableFilename: string): string {
   return `${DEFAULT_SOURCE_REPOSITORY}/.github/workflows/${reusableFilename}`;
 }
 
-/** {@link matchCentralReusableWorkflow} の判定結果。 */
+/** {@link matchCentralReusableWorkflow} の判定結果種別。 */
 type ReusableWorkflowMatch = "matched" | "missing-ref" | "not-found";
+
+/** {@link matchCentralReusableWorkflow} の戻り値。 */
+interface ReusableWorkflowLookup {
+  status: ReusableWorkflowMatch;
+  /** マッチした `uses:` エントリの `@` 以降（version/ref）。matched/missing-ref のときのみ設定される。 */
+  ref?: string;
+}
 
 /**
  * {@link WorkflowInfo.usesRefs} の中から中央 reusable workflow を指す 1 件を探し、
@@ -368,20 +389,25 @@ type ReusableWorkflowMatch = "matched" | "missing-ref" | "not-found";
  * 省略すると GitHub 側が invalid workflow として拒否し実行できない。owner/repo/path が一致していても
  * `@ref` が無ければ「中央 reusable workflow を呼んでいるように見えて実際には動かない」ため、
  * path 一致だけで PASS にはせず区別する。
+ *
+ * 戻り値の `ref` は、workflow に複数の `uses:` がある場合（中央 workflow 以外の reusable workflow を
+ * 別 job で呼んでいる場合など）に、中央 workflow 自身の version だけを {@link checkWorkflow} の
+ * `@main` 警告へ渡すために使う。無関係な `uses:` が `@main` でも中央 workflow がタグ固定されていれば
+ * 警告を出さない（逆も然り）。
  */
 function matchCentralReusableWorkflow(
   usesRefs: readonly string[],
   reusableFilename: string,
-): ReusableWorkflowMatch {
+): ReusableWorkflowLookup {
   const expected = expectedReusableWorkflowRef(reusableFilename);
   for (const ref of usesRefs) {
     const atIndex = ref.indexOf("@");
     const path = atIndex === -1 ? ref : ref.slice(0, atIndex);
     if (path !== expected) continue;
     const version = atIndex === -1 ? "" : ref.slice(atIndex + 1);
-    return version.length > 0 ? "matched" : "missing-ref";
+    return { status: version.length > 0 ? "matched" : "missing-ref", ref: version };
   }
-  return "not-found";
+  return { status: "not-found" };
 }
 
 /** 1 workflow（ai-review / ai-improve）の診断仕様。 */
@@ -433,14 +459,14 @@ async function checkWorkflow(repoRoot: string, spec: WorkflowSpec): Promise<Doct
     return checks;
   }
 
-  const reusableMatch = matchCentralReusableWorkflow(info.usesRefs, spec.reusableFilename);
-  if (reusableMatch === "matched") {
+  const reusable = matchCentralReusableWorkflow(info.usesRefs, spec.reusableFilename);
+  if (reusable.status === "matched") {
     checks.push({
       id: `workflow.${spec.label}.reusable-call`,
       status: "pass",
       message: `${spec.label} workflow calls the central reusable workflow`,
     });
-  } else if (reusableMatch === "missing-ref") {
+  } else if (reusable.status === "missing-ref") {
     checks.push({
       id: `workflow.${spec.label}.reusable-call`,
       status: "fail",
@@ -455,7 +481,9 @@ async function checkWorkflow(repoRoot: string, spec: WorkflowSpec): Promise<Doct
     });
   }
 
-  if (info.usesRefs.some((ref) => ref.endsWith("@main"))) {
+  // 中央 reusable workflow 自身の ref だけを見る（無関係な job が別の reusable workflow を
+  // @main で呼んでいても誤って警告しない・逆に中央 workflow が @main でも見逃さないようにする）。
+  if (reusable.ref === "main") {
     checks.push({
       id: `workflow.${spec.label}.ref`,
       status: "warn",

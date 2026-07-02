@@ -440,6 +440,31 @@ jobs:
     expect(findCheck(report, "workflow.ai-review.ref")?.status).toBe("warn");
   });
 
+  it("中央 workflow 自身がタグ固定されていれば、無関係な別 job の @main 参照では WARN しない", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    await writeRaw(
+      repoRoot,
+      ".github/workflows/ai-review.yml",
+      `name: AI Review
+on:
+  pull_request: {}
+permissions:
+  contents: read
+jobs:
+  ai_review:
+    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml@v1
+  unrelated:
+    uses: some-other-org/some-other-repo/.github/workflows/other.yml@main
+`,
+    );
+    const dist = await loadDistribution(sourceRoot, "base");
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+
+    expect(findCheck(report, "workflow.ai-review.reusable-call")?.status).toBe("pass");
+    expect(findCheck(report, "workflow.ai-review.ref")).toBeUndefined();
+  });
+
   it("ai-review workflow の contents:write は FAIL", async () => {
     await setupBaseDistribution(sourceRoot);
     await initGitRepo(repoRoot);

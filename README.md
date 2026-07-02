@@ -39,7 +39,7 @@ aro doctor --repo /path/to/your-repo   # 対象repoの状態をPASS/WARN/FAILで
 - `.ai/project.yaml` を中央 source の authoritative schema（`schemas/project.schema.json`）で検証する。
 - `.ai/managed/**` の checksum を lock file と突き合わせ、人間による直接編集を FAIL として検出する。
 - lock file にあるが現在の manifest に無い managed file は `orphaned` として WARN する（MVP では自動削除しない）。
-- `.github/workflows/ai-review.yml` / `ai-improve.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission をチェックする。
+- `.github/workflows/ai-review.yml` / `ai-improve.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission（`write-all` 省略記法・job-level のpermissionsブロックも含む）をチェックする。
 - `.gitignore` / `.gitattributes` / `.prettierignore` に必要行が揃っているかを確認する。
 - 終了コード: `0`=FAIL なし / `1`=FAIL あり / `3`=unexpected error（repo path 不正・source 読込失敗など）。
 
