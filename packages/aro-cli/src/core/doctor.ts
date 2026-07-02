@@ -351,17 +351,37 @@ function parseWorkflowInfo(yamlText: string): WorkflowInfo | null {
  * ファイル名の部分一致（`includes`）では `other-org/other-repo/.github/workflows/<file>` のような
  * 別リポジトリ参照や、同名ファイルを指すローカル workflow まで「中央 reusable workflow を呼んでいる」
  * と誤判定してしまう。owner/repo/path を `@` より前の部分で厳密一致させることでこれを防ぐ。
- * version（`@v1` / `@main` 等）は別チェック（{@link checkWorkflow} の `@main` 警告）で扱うため、
- * ここでは比較対象に含めない。
  */
 function expectedReusableWorkflowRef(reusableFilename: string): string {
   return `${DEFAULT_SOURCE_REPOSITORY}/.github/workflows/${reusableFilename}`;
 }
 
-/** {@link WorkflowInfo.usesRefs} のいずれかが中央 reusable workflow を厳密に指しているか。 */
-function callsCentralReusableWorkflow(usesRefs: readonly string[], reusableFilename: string): boolean {
+/** {@link matchCentralReusableWorkflow} の判定結果。 */
+type ReusableWorkflowMatch = "matched" | "missing-ref" | "not-found";
+
+/**
+ * {@link WorkflowInfo.usesRefs} の中から中央 reusable workflow を指す 1 件を探し、
+ * その参照が実行可能な形（`@ref` 付き）かを判定する。
+ *
+ * GitHub Actions の他リポジトリ reusable workflow 呼び出しは
+ * `{owner}/{repo}/.github/workflows/{file}@{ref}` の形式が必須で、`@{ref}`（tag/branch/SHA）を
+ * 省略すると GitHub 側が invalid workflow として拒否し実行できない。owner/repo/path が一致していても
+ * `@ref` が無ければ「中央 reusable workflow を呼んでいるように見えて実際には動かない」ため、
+ * path 一致だけで PASS にはせず区別する。
+ */
+function matchCentralReusableWorkflow(
+  usesRefs: readonly string[],
+  reusableFilename: string,
+): ReusableWorkflowMatch {
   const expected = expectedReusableWorkflowRef(reusableFilename);
-  return usesRefs.some((ref) => ref.split("@")[0] === expected);
+  for (const ref of usesRefs) {
+    const atIndex = ref.indexOf("@");
+    const path = atIndex === -1 ? ref : ref.slice(0, atIndex);
+    if (path !== expected) continue;
+    const version = atIndex === -1 ? "" : ref.slice(atIndex + 1);
+    return version.length > 0 ? "matched" : "missing-ref";
+  }
+  return "not-found";
 }
 
 /** 1 workflow（ai-review / ai-improve）の診断仕様。 */
@@ -413,11 +433,19 @@ async function checkWorkflow(repoRoot: string, spec: WorkflowSpec): Promise<Doct
     return checks;
   }
 
-  if (callsCentralReusableWorkflow(info.usesRefs, spec.reusableFilename)) {
+  const reusableMatch = matchCentralReusableWorkflow(info.usesRefs, spec.reusableFilename);
+  if (reusableMatch === "matched") {
     checks.push({
       id: `workflow.${spec.label}.reusable-call`,
       status: "pass",
       message: `${spec.label} workflow calls the central reusable workflow`,
+    });
+  } else if (reusableMatch === "missing-ref") {
+    checks.push({
+      id: `workflow.${spec.label}.reusable-call`,
+      status: "fail",
+      message: `${spec.relPath} references the central reusable workflow without a version ref (@tag/@branch/@sha)`,
+      hint: `GitHub Actions は他リポジトリの reusable workflow 呼び出しに @ref を必須とします。例: uses: ${expectedReusableWorkflowRef(spec.reusableFilename)}@v1`,
     });
   } else {
     checks.push({

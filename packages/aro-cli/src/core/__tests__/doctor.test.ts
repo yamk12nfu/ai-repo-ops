@@ -374,6 +374,50 @@ jobs:
     expect(check?.message).toContain("yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml");
   });
 
+  it("正しい path でも @ref が無ければ FAIL（GitHub Actions は他リポジトリ呼び出しに @ref を必須とする）", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    await writeRaw(
+      repoRoot,
+      ".github/workflows/ai-review.yml",
+      `name: AI Review
+on:
+  pull_request: {}
+permissions:
+  contents: read
+jobs:
+  ai_review:
+    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml
+`,
+    );
+    const dist = await loadDistribution(sourceRoot, "base");
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+
+    const check = findCheck(report, "workflow.ai-review.reusable-call");
+    expect(check?.status).toBe("fail");
+    expect(check?.message).toContain("without a version ref");
+  });
+
+  it("@ref が空文字（末尾が @ のみ）でも FAIL", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    await writeRaw(
+      repoRoot,
+      ".github/workflows/ai-review.yml",
+      `name: AI Review
+on:
+  pull_request: {}
+jobs:
+  ai_review:
+    uses: "yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml@"
+`,
+    );
+    const dist = await loadDistribution(sourceRoot, "base");
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+
+    expect(findCheck(report, "workflow.ai-review.reusable-call")?.status).toBe("fail");
+  });
+
   it("@main 参照は WARN", async () => {
     await setupBaseDistribution(sourceRoot);
     await initGitRepo(repoRoot);
