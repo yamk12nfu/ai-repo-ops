@@ -2,7 +2,7 @@
 
 AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。
 
-> ステータス: **MVP Phase 5 実装中**。`aro init` / `aro diff` / `aro sync` は実装済み。`aro doctor` は Phase 6 で実装予定。
+> ステータス: **MVP Phase 6 完了**。`aro init` / `aro diff` / `aro sync` / `aro doctor` はすべて実装済み。残るは Phase 7（docs 拡充）のみ。
 
 ## Development
 
@@ -26,10 +26,22 @@ pnpm aro --help     # aro CLI のヘルプ（事前に pnpm build が必要）
 対象の Git repo に対して次を実行する（`--source` 省略時は実行モジュール位置から `distribution/` を持つ ai-repo-ops source root を上方探索する）。
 
 ```bash
-aro init --repo /path/to/your-repo   # 初回展開（.ai/ / workflow / lock を生成）
-aro diff --repo /path/to/your-repo   # 中央配布物との差分（実ファイルは変更しない）
-aro sync --repo /path/to/your-repo   # 中央配布物を適用（conflict があれば一切変更せず abort）
+aro init --repo /path/to/your-repo     # 初回展開（.ai/ / workflow / lock を生成）
+aro diff --repo /path/to/your-repo     # 中央配布物との差分（実ファイルは変更しない）
+aro sync --repo /path/to/your-repo     # 中央配布物を適用（conflict があれば一切変更せず abort）
+aro doctor --repo /path/to/your-repo   # 対象repoの状態をPASS/WARN/FAILで診断する（読み取り専用）
 ```
+
+### `aro doctor`
+
+対象 repo が ai-repo-ops に正しく参加できているかを診断する。実ファイルは一切変更しない。
+
+- `.ai/project.yaml` を中央 source の authoritative schema（`schemas/project.schema.json`）で検証する。
+- `.ai/managed/**` の checksum を lock file と突き合わせ、人間による直接編集を FAIL として検出する。
+- lock file にあるが現在の manifest に無い managed file は `orphaned` として WARN する（MVP では自動削除しない）。
+- `.github/workflows/ai-review.yml` / `ai-improve.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission をチェックする。
+- `.gitignore` / `.gitattributes` / `.prettierignore` に必要行が揃っているかを確認する。
+- 終了コード: `0`=FAIL なし / `1`=FAIL あり / `3`=unexpected error（repo path 不正・source 読込失敗など）。
 
 ### 更新判定と conflict
 
