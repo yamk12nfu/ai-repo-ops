@@ -112,18 +112,19 @@ No files were modified.
 書き込みフェーズでの I/O エラー（disk full・permission error 等）は稀だが、発生時に `aro` は書き込み済みの内容を元に戻す機構を持たない。代わりに `ApplyIoError` が `touchedPaths`（書き込みを試みた repo 相対 path）と `newPaths`（そのうち新規作成だった path）を保持し、CLI が復旧手順を表示する。
 
 ```txt
-ERROR apply failed while writing .ai/managed/prompts/review.md
+ERROR apply failed while writing .ai/managed/prompts/new-policy.md
+      ENOSPC: no space left on device, write
 
-Touched paths:
+Touched paths (may be partially written):
   .ai/managed/prompts/review.md
-  .gitattributes
+  .ai/managed/prompts/new-policy.md
 
 Suggested recovery:
-  git restore -- .ai/managed/prompts/review.md .gitattributes
-  git clean -fd -- .ai/tmp/
+  git restore -- '.ai/managed/prompts/review.md'   # 既存（tracked）ファイルを元に戻す
+  rm -f '.ai/managed/prompts/new-policy.md'   # 新規作成された未追跡ファイルを削除する
 ```
 
-既存ファイル（tracked）は `git restore`、新規作成ファイルは削除で復旧する。**`aro init` 直後は生成物を一度 commit してから次の `aro sync` を実行することを推奨する** — 未 commit のまま I/O 失敗が起きると `git restore` で戻せないことがある。
+既存ファイル（tracked。`update` で書き換えた分）は `git restore`、新規作成ファイル（`create` で書いた分）は `rm -f` で削除して復旧する。`touchedPaths`（書き込みを試みた全 path）を `newPaths`（新規作成分）で振り分け、この 2 種類のコマンドに分けて案内する（`formatApplyIoError`。path は `shellQuote` でクォートするため、空白を含む path でも壊れない）。**`aro init` 直後は生成物を一度 commit してから次の `aro sync` を実行することを推奨する** — 未 commit のまま I/O 失敗が起きると `git restore` で戻せないことがある。
 
 ## managed file を直接編集してしまった場合の復旧
 
