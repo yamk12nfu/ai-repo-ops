@@ -27,6 +27,8 @@ import { parseYaml } from "./yaml.js";
 const DISTRIBUTION_DIR = "distribution";
 /** manifest ファイル名。 */
 const MANIFEST_FILENAME = "manifest.yaml";
+/** authoritative project schema（source root からの相対 path。計画 §0.1.5 / §17.4）。 */
+const PROJECT_SCHEMA_RELATIVE_PATH = "schemas/project.schema.json";
 
 /**
  * distribution 名として許可するパターン（単一 path セグメント）。
@@ -387,4 +389,39 @@ export async function loadDistribution(
 /** source root からの相対 manifest path（`distribution/<name>/manifest.yaml`）。 */
 function manifestRelative(distribution: string): string {
   return `${DISTRIBUTION_DIR}/${distribution}/${MANIFEST_FILENAME}`;
+}
+
+/**
+ * ai-repo-ops source root の authoritative project schema（`schemas/project.schema.json`）を読み、
+ * JSON として parse する（計画 §0.1.5 / §17.4「doctor validation は中央 source schema を使う」）。
+ *
+ * 対象 repo 側の `.ai/managed/schemas/project.schema.json` はビルド/sync script が生成する
+ * エディタ補完用コピーに過ぎず、doctor の検証にはここで読む authoritative 版だけを使う
+ * （対象 repo 側コピーの改変は managed file の checksum 検証だけで検出する）。
+ *
+ * @param sourceRoot ai-repo-ops source root（絶対 path 推奨）。
+ * @throws {SourceError} schema ファイルが無い（`PROJECT_SCHEMA_NOT_FOUND`）/
+ *   JSON として parse できない（`PROJECT_SCHEMA_PARSE`）場合。
+ */
+export async function loadProjectSchema(sourceRoot: string): Promise<unknown> {
+  const buffer = await readFileWithinRoot(sourceRoot, PROJECT_SCHEMA_RELATIVE_PATH, "schemas/project.schema.json");
+  if (buffer === null) {
+    throw new SourceError(
+      "PROJECT_SCHEMA_NOT_FOUND",
+      `authoritative project schema が見つかりません: ${path.join(sourceRoot, PROJECT_SCHEMA_RELATIVE_PATH)}`,
+      { hint: `${PROJECT_SCHEMA_RELATIVE_PATH} を作成してください。` },
+    );
+  }
+  assertUtf8Text(buffer, "schemas/project.schema.json", PROJECT_SCHEMA_RELATIVE_PATH);
+  try {
+    // 先頭 UTF-8 BOM だけで JSON.parse が失敗しないよう、他の source ファイルと同じく canonicalize
+    // してから parse する（§6.2。BOM 付き JSON は JSON.parse がそのまま SyntaxError を投げるため）。
+    return JSON.parse(canonicalizeTextString(buffer.toString("utf8"))) as unknown;
+  } catch (error) {
+    throw new SourceError(
+      "PROJECT_SCHEMA_PARSE",
+      `authoritative project schema の JSON parse に失敗しました: ${PROJECT_SCHEMA_RELATIVE_PATH}`,
+      { hint: "JSON 構文を確認してください。", cause: error },
+    );
+  }
 }

@@ -88,6 +88,14 @@ preserve:
   - .ai/local/**
 `;
 
+/**
+ * authoritative project schema の source root からの相対 path（doctor が読む。計画 §0.1.5 / §17.4）。
+ * fixture では `{}`（何にでも valid な空 schema）を既定にし、diff/init/sync 側の既存テストが
+ * schema 検証の影響を受けないようにする。doctor 固有の schema 検証は
+ * core/__tests__/doctor.test.ts が独自の schema を直接 runDoctor へ渡してテストする。
+ */
+const PROJECT_SCHEMA_REL = "schemas/project.schema.json";
+
 /** sourceRoot に base distribution を作る。manifest は差し替え可能。 */
 export async function setupBaseDistribution(
   sourceRoot: string,
@@ -102,6 +110,7 @@ export async function setupBaseDistribution(
     "distribution/base/manifest.yaml",
     options.manifestYaml ?? DEFAULT_MANIFEST,
   );
+  await writeRaw(sourceRoot, PROJECT_SCHEMA_REL, "{}\n");
 }
 
 /** 固定タイムスタンプ（lock の created_at/updated_at）。 */
