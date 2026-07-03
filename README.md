@@ -2,7 +2,14 @@
 
 AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。
 
-> ステータス: **MVP Phase 6 完了**。`aro init` / `aro diff` / `aro sync` / `aro doctor` はすべて実装済み。残るは Phase 7（docs 拡充）のみ。
+> ステータス: **MVP 完了**（Phase 0〜7）。`aro init` / `aro diff` / `aro sync` / `aro doctor` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。
+
+## Documentation
+
+- [`docs/distribution.md`](./docs/distribution.md) — manifest / strategy / distribution content hash / authoritative schema
+- [`docs/sync-strategy.md`](./docs/sync-strategy.md) — canonical text・checksum・conflict判定・atomicity・コマンド終了コード
+- [`docs/security.md`](./docs/security.md) — path traversal / symlink / 固定保護path / workflow permissions
+- [`docs/existing-tools.md`](./docs/existing-tools.md) — Copier / Cruft との関係、自作する理由、再評価ポイント
 
 ## Development
 
@@ -17,9 +24,9 @@ pnpm build          # 全パッケージを tsc でビルド
 pnpm typecheck      # 型検査（テストファイルも含む）
 pnpm test           # vitest
 pnpm aro --help     # aro CLI のヘルプ（事前に pnpm build が必要）
+pnpm schema:sync    # authoritative schema（schemas/project.schema.json）を配布用コピーへ同期
+pnpm schema:check   # 上記の差分チェック（CI向け。差分があれば exit 1）
 ```
-
-利用者向けの導入・運用手順（`pnpm link --global` での `aro` 公開、`docs/` への詳細な使い方・復旧手順など）は Phase 7 で拡充する。以下は MVP 時点の最小手順。
 
 ## 使い方（MVP）
 
@@ -61,5 +68,5 @@ MVP の `aro` は**自前の backup/restore（自動 rollback）を持たない*
 
 - ルートパッケージ `ai-repo-ops` は **private な workspace ルート**であり、npm publish / tarball 配布の対象ではない（`private: true` が publish を防ぐ）。
 - 配布可能な単位は CLI パッケージ `@ai-repo-ops/aro-cli`（`commander` 依存と実体コードを持ち、`files` で `dist` / `src` のみ同梱）。
-- MVP ではどちらも npm 配布しない。利用はリポジトリ内（`pnpm aro ...` / `pnpm link --global`）に限る。`pnpm pack` での配布硬化は Phase 7 で扱う。
+- MVP ではどちらも npm 配布しない。利用はリポジトリ内（`pnpm aro ...` / `pnpm link --global`）に限る。`pnpm pack` での配布硬化は MVP 非ゴール（post-MVP で再検討）。
 - 既知の制約: ルートを `pnpm pack` してインストールしても、`bin/aro` が読む `commander` はルートの依存ではないため起動しない（＝ルート単体配布は想定運用外）。パッケージング時には `bin` を `@ai-repo-ops/aro-cli` 側へ寄せる、もしくはルートへ依存を持たせる方針とする。
