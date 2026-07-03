@@ -414,7 +414,9 @@ export async function loadProjectSchema(sourceRoot: string): Promise<unknown> {
   }
   assertUtf8Text(buffer, "schemas/project.schema.json", PROJECT_SCHEMA_RELATIVE_PATH);
   try {
-    return JSON.parse(buffer.toString("utf8")) as unknown;
+    // 先頭 UTF-8 BOM だけで JSON.parse が失敗しないよう、他の source ファイルと同じく canonicalize
+    // してから parse する（§6.2。BOM 付き JSON は JSON.parse がそのまま SyntaxError を投げるため）。
+    return JSON.parse(canonicalizeTextString(buffer.toString("utf8"))) as unknown;
   } catch (error) {
     throw new SourceError(
       "PROJECT_SCHEMA_PARSE",

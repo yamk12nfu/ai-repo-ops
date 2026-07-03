@@ -9,6 +9,7 @@ import { loadDistribution } from "../source.js";
 import {
   initGitRepo,
   makeTempDir,
+  REVIEW_REL,
   seedRepoAsSynced,
   setupBaseDistribution,
   writeRaw,
@@ -233,6 +234,99 @@ describe("runDoctor: managed file checksum（Scenario 3 / 7）", () => {
 
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
     expect(findCheck(report, "managed.checksums")?.status).toBe("pass");
+  });
+
+  it("中央 source が更新されると managed.outdated で WARN になる（conflict ではない・managed.checksums は出ない）", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist1 = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist1);
+    // 対象 repo は無編集のまま、中央側だけ review.md を更新する。
+    await writeRaw(sourceRoot, REVIEW_REL, "# Review prompt CHANGED\n");
+    const dist2 = await loadDistribution(sourceRoot, "base");
+
+    const report = await runDoctor({ repoRoot, distribution: dist2, projectSchema: PROJECT_SCHEMA });
+
+    const check = findCheck(report, "managed.outdated..ai/managed/prompts/review.md");
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("out of date");
+    expect(check?.hint).toContain("aro sync");
+    // conflict ではないので checksum-mismatch は出ない。「全件 noop」でもないので pass サマリも出ない。
+    expect(findCheck(report, "managed.checksum-mismatch..ai/managed/prompts/review.md")).toBeUndefined();
+    expect(findCheck(report, "managed.checksums")).toBeUndefined();
+  });
+
+  it("sync 済み managed file がディスクから消えると『過去に sync 済み』として managed.missing で WARN", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist);
+    await rm(path.join(repoRoot, ".ai/managed/prompts/review.md"));
+
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+
+    const check = findCheck(report, "managed.missing..ai/managed/prompts/review.md");
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("previously synced");
+    expect(check?.message).toContain("missing from disk");
+  });
+
+  it("manifest に新規追加された managed file はまだ未作成のため『未作成』として managed.missing で WARN", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist1 = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist1);
+
+    // 中央側に review.md / default.yaml に加えて新しい managed file を追加する（この repo にはまだ無い）。
+    await writeRaw(sourceRoot, "distribution/base/files/.ai/managed/prompts/new.md", "# New prompt\n");
+    await writeRaw(
+      sourceRoot,
+      "distribution/base/manifest.yaml",
+      `schema_version: 1
+name: base
+version: 0.2.0
+files:
+  - src: files/.ai/managed/prompts/review.md
+    dest: .ai/managed/prompts/review.md
+    strategy: managed_overwrite
+  - src: files/.ai/managed/policies/default.yaml
+    dest: .ai/managed/policies/default.yaml
+    strategy: managed_overwrite
+  - src: files/.ai/managed/prompts/new.md
+    dest: .ai/managed/prompts/new.md
+    strategy: managed_overwrite
+seed_files:
+  - dest: .ai/project.yaml
+    template: project.yaml.hbs
+    strategy: create_only
+  - src: files/.github/workflows/ai-review.yml
+    dest: .github/workflows/ai-review.yml
+    strategy: create_only
+patches:
+  - type: append_unique_lines
+    path: .gitignore
+    lines:
+      - .ai/runs/
+      - .ai/tmp/
+      - .ai/logs/
+  - type: append_unique_lines
+    path: .gitattributes
+    lines:
+      - "# ai-repo-ops managed text files"
+      - ".ai/managed/** text eol=lf"
+preserve:
+  - .ai/project.yaml
+  - .ai/local/**
+`,
+    );
+    const dist2 = await loadDistribution(sourceRoot, "base");
+
+    const report = await runDoctor({ repoRoot, distribution: dist2, projectSchema: PROJECT_SCHEMA });
+
+    const check = findCheck(report, "managed.missing..ai/managed/prompts/new.md");
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("has not been created yet");
+    expect(check?.message).not.toContain("previously synced");
   });
 });
 

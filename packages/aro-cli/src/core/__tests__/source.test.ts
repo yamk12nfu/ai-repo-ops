@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { canonicalSha256OfString } from "../checksum.js";
 import { ManifestError, SourceError } from "../errors.js";
-import { loadDistribution, resolveSourceLocation, resolveSourceRoot } from "../source.js";
+import { loadDistribution, loadProjectSchema, resolveSourceLocation, resolveSourceRoot } from "../source.js";
 
 let sourceRoot: string;
 
@@ -276,5 +276,43 @@ patches:
     await writeSourceFile(REVIEW_REL, "# Review prompt CHANGED\n");
     const after = (await loadDistribution(sourceRoot, "base")).contentSha256;
     expect(after).not.toBe(before);
+  });
+});
+
+describe("loadProjectSchema", () => {
+  it("schemas/project.schema.json を JSON.parse して返す", async () => {
+    await writeSourceFile("schemas/project.schema.json", '{"type":"object"}');
+    const schema = await loadProjectSchema(sourceRoot);
+    expect(schema).toEqual({ type: "object" });
+  });
+
+  it("先頭 UTF-8 BOM 付きでも parse できる（§6.2。JSON.parse は BOM を自動で無視しない）", async () => {
+    const withBom = Buffer.concat([
+      Buffer.from([0xef, 0xbb, 0xbf]),
+      Buffer.from('{"type":"object"}', "utf8"),
+    ]);
+    await writeSourceBytes("schemas/project.schema.json", withBom);
+    const schema = await loadProjectSchema(sourceRoot);
+    expect(schema).toEqual({ type: "object" });
+  });
+
+  it("ファイルが無ければ SourceError（PROJECT_SCHEMA_NOT_FOUND）", async () => {
+    await expect(loadProjectSchema(sourceRoot)).rejects.toMatchObject({
+      code: "PROJECT_SCHEMA_NOT_FOUND",
+    });
+  });
+
+  it("壊れた JSON は SourceError（PROJECT_SCHEMA_PARSE）", async () => {
+    await writeSourceFile("schemas/project.schema.json", "{not valid json");
+    await expect(loadProjectSchema(sourceRoot)).rejects.toMatchObject({
+      code: "PROJECT_SCHEMA_PARSE",
+    });
+  });
+
+  it("不正な UTF-8 は SourceError（SOURCE_FILE_NOT_UTF8）", async () => {
+    await writeSourceBytes("schemas/project.schema.json", Buffer.from([0x68, 0x69, 0xff, 0x0a]));
+    await expect(loadProjectSchema(sourceRoot)).rejects.toMatchObject({
+      code: "SOURCE_FILE_NOT_UTF8",
+    });
   });
 });

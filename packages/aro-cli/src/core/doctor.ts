@@ -258,18 +258,50 @@ async function checkSyncPlanDerived(
   }
 
   if (lock !== null) {
-    const conflicts = plan.changes.filter((c) => c.strategy === "managed_overwrite" && c.kind === "conflict");
-    if (conflicts.length === 0) {
+    const managedChanges = plan.changes.filter((c) => c.strategy === "managed_overwrite");
+    const conflicts = managedChanges.filter((c) => c.kind === "conflict");
+    // update / create は conflict ではない ── ローカル改変ではなく、中央 distribution に対して
+    // 単に古い（もしくは未作成）だけの状態。`aro sync` で自動的に解消される drift なので WARN にする
+    // （このファイル冒頭の重大度方針どおり）。conflict が無いからといって「checksum は有効」と
+    // 断定すると、中央側の更新に追従できていない・ファイルが消えている状態を doctor が見逃してしまう。
+    const outdated = managedChanges.filter((c) => c.kind === "update");
+    const missing = managedChanges.filter((c) => c.kind === "create");
+
+    for (const c of conflicts) {
+      checks.push({
+        id: `managed.checksum-mismatch.${c.path}`,
+        status: "fail",
+        message: `managed file checksum mismatch: ${c.path}${c.reason !== undefined ? ` (${c.reason})` : ""}`,
+        hint: `git restore -- ${c.path} && aro sync --repo .`,
+      });
+    }
+
+    for (const c of outdated) {
+      checks.push({
+        id: `managed.outdated.${c.path}`,
+        status: "warn",
+        message: `managed file is out of date with the central distribution: ${c.path}`,
+        hint: "`aro sync --repo .` で最新化されます。",
+      });
+    }
+
+    for (const c of missing) {
+      // installedSha256 が付いていれば「過去に一度 sync 済みだったが、その後ディスクから消えた」。
+      // 付いていなければ「manifest に追加されたがこの repo ではまだ一度も作成されていない」。
+      // どちらも severity は WARN（sync で解消される）だが、メッセージで状況を区別する。
+      const wasSynced = c.installedSha256 !== null && c.installedSha256 !== undefined;
+      checks.push({
+        id: `managed.missing.${c.path}`,
+        status: "warn",
+        message: wasSynced
+          ? `managed file was previously synced but is now missing from disk: ${c.path}`
+          : `managed file has not been created yet: ${c.path}`,
+        hint: "`aro sync --repo .` で作成されます。",
+      });
+    }
+
+    if (conflicts.length === 0 && outdated.length === 0 && missing.length === 0) {
       checks.push({ id: "managed.checksums", status: "pass", message: "managed file checksums are valid" });
-    } else {
-      for (const c of conflicts) {
-        checks.push({
-          id: `managed.checksum-mismatch.${c.path}`,
-          status: "fail",
-          message: `managed file checksum mismatch: ${c.path}${c.reason !== undefined ? ` (${c.reason})` : ""}`,
-          hint: `git restore -- ${c.path} && aro sync --repo .`,
-        });
-      }
     }
 
     for (const o of plan.changes.filter((c) => c.kind === "orphaned")) {
