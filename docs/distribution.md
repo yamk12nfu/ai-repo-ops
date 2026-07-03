@@ -21,7 +21,7 @@ distribution/
           ai-improve.yml
 ```
 
-`--distribution` オプション（デフォルト `base`）で `distribution/<name>/` を選択する。distribution 名は英数字・`.`・`_`・`-` のみの単一セグメントで、`manifest.yaml` の `name` フィールドとディレクトリ名は一致していなければならない（不一致は `DISTRIBUTION_NAME_MISMATCH` エラー）。
+`--distribution` オプション（デフォルト `base`）で `distribution/<name>/` を選択する。distribution 名は単一セグメントで、先頭は英数字・`_`・`-` のいずれか（先頭ドットは不可）、2 文字目以降は英数字・`.`・`_`・`-` を許可する（`assertValidDistributionName`）。`manifest.yaml` の `name` フィールドとディレクトリ名は一致していなければならない（不一致は `DISTRIBUTION_NAME_MISMATCH` エラー）。
 
 ## manifest.yaml の構造
 

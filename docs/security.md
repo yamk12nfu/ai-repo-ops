@@ -4,7 +4,7 @@
 
 ## path traversal 防止
 
-manifest の `src` / `dest` / `template` / `patches[].path`、および lock file 内の path はすべて `assertSafeRelativePath` を通す。
+manifest の `files[].src` / `files[].dest` / `seed_files[].dest` / `seed_files[].src` / `seed_files[].template` / `patches[].path`、および lock file 内の path はすべて `assertSafeRelativePath` を通す。
 
 拒否する入力:
 
