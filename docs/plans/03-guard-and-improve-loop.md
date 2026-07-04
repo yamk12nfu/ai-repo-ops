@@ -1,44 +1,65 @@
-# 計画 03: `aro guard` + 改善ループ — 半自律の AI 改善 PR
+# 計画 03: `aro guard` + ローカル改善ループ — AI はローカル、CI は決定的検証
 
-優先度: 高 / 前提: 計画 01, 02 / 規模: 大（**Stage 1 / Stage 2 に分割し、別 PR で実装する**）
+優先度: 高 / 前提: 計画 01（計画 02 は実装のみ。dogfooding は本計画に引き継ぎ） / 規模: 大
+（**Stage 1 / Stage 2 に分割し、別 PR で実装する**）
 
-- **Stage 1: `aro guard`** — AI 不要。fixture repo に diff を作ればテストが完結する独立実装
-- **Stage 2: 改善ループ** — Stage 1 が安定してから。`contents: write` の解禁はこの段階のみ
+- **Stage 1: `aro guard` + CI への組み込み** — AI 不要。fixture repo に diff を作ればテストが完結する
+  独立実装。CI 側の消費者（reusable workflow）もここで guard ベースに置き換える
+- **Stage 2: ローカル改善ループ** — 開発者が手元の Claude Code（サブスクリプション）で
+  `improve.md` / policies を消費して改善を回す。**CI 内で AI は実行しない**
+
+> **方針（2026-07-05 改訂）**: 従量課金 API キーで CI 上の AI を動かす方式・secrets を対象 repo ごとに
+> 配る運用・自前 AI レビュー基盤は採らない（経緯は [計画 02 の方向転換注記](./02-ai-review-commenter.md)
+> を参照）。PR レビューは既存サービス（CodeRabbit 等）に任せ、本計画は次の分担に立つ。
+>
+> - **CI（中央が配布する workflow）**: AI なしの決定的検証だけを行う（`aro guard` / quality gates / doctor）
+> - **AI の実行**: 開発者のローカル環境（Claude Code 等、開発者自身のサブスクリプション）で行う
+> - **中央（ai-repo-ops）**: プロンプト・ポリシーの配布と、それを機械的に強制するガードレールの提供に徹する
 
 ## できるようになること
 
 | | Before（現状） | After（完了後） |
 |---|---|---|
-| 改善ループ | `ai-improve.reusable.yml` は stub。cron（毎週月曜 18:00 UTC）は発火するが echo のみ | **週次で AI が小さな改善を実行し、quality gates が緑なら PR が自動で立つ**。merge は人間が判断する（半自律ループ） |
-| policies の強制 | `allowed_paths` / `max_changed_files` 等はプロンプトで AI に「お願い」するだけ | **`aro guard` が AI の生成した diff を機械検証する**。モデルの従順さに依存しない |
-| ガードレールの検証 | 配布している policies に消費者がいない | policies（`change_limits` / `forbidden_paths` / `block_on`）が CI 上で実際に効く |
+| policies の強制 | `allowed_paths` / `max_changed_files` 等はプロンプトで AI に「お願い」するだけ | **`aro guard` が diff を機械検証する**。モデルの従順さに依存しない |
+| PR 時の CI | `ai-review.reusable.yml` は AI レビュー（API キー未登録なら skip = 実質何もしない） | PR を開くと **`aro guard` が policies 違反を検出して fail / コメントする**。API キー・secrets 不要で全対象 repo が即恩恵を受ける |
+| 改善ループ | `ai-improve.reusable.yml` は stub。回す手段がない | **開発者が手元の Claude Code で改善ループを回せる**（配布済み `improve.md` + `project.yaml` + policies を消費 → ローカルで guard + gates を自己検証 → 開発者の権限で PR）。API 課金・secrets 配布なし |
+| 配布物の検証 | prompts / policies に消費者がいない | guard（機械）と ローカル改善ループ（AI）の両方が policies を消費し、payload 設計が実運用で検証される |
 
 ## 現状とギャップ
 
-- `.github/workflows/ai-improve.reusable.yml` は echo + config 存在確認のみ。
-  `contents: write` / `pull-requests: write` の権限枠は用意済み。
-- 配布側 `ai-improve.yml` は `workflow_dispatch` + `schedule`（cron）で発火する設計が完成している。
-- `improve.md` プロンプトはループ 1 周分の手順（小さい改善を 1 つ → gates 実行 → 緑なら PR、
-  ダメなら中止して提案のみ）と `ai.max_loops` での打ち切りまで規定済み。
-- しかし制約の実体は**プロンプト内の文章だけ**。diff を検証するコードは存在しない。
+- `aro guard` は存在しない。制約の実体は**プロンプト内の文章だけ**。diff を検証するコードがない。
 - 検証に必要な部品は core に揃っている: `core/paths.ts`（glob マッチ・path 安全性）、
   `core/lockfile.ts` / `core/checksum.ts`（managed file の不可侵検証）。
+- `ai-review.reusable.yml`（v0.1.1）は claude-code-action ベースの AI レビューだが、API キー未登録なら
+  skip するだけで、対象 repo に価値を提供していない。互換性契約（`workflow_call` の inputs:
+  `config_path` / `lock_path`、secrets: `anthropic_api_key`）は凍結済みで、**エンジンは中央の内部実装
+  として自由に差し替えられる**（このための契約設計だった）。
+- `ai-improve.reusable.yml` は echo のみの stub。配布側 `ai-improve.yml` は `workflow_dispatch` + cron。
+- `improve.md` プロンプトはループ 1 周分の手順（小さい改善を 1 つ → gates 実行 → 緑なら PR、
+  ダメなら中止して提案のみ）と `ai.max_loops` での打ち切りまで規定済み。ローカル実行でもそのまま使える。
+- `risk_level` → policy の対応規則は計画 02 実装で確定済み（`low`→`low-risk.yaml` /
+  `medium`→`default.yaml` / `high`→`security.yaml`。`ai-review.reusable.yml` に実装がある）。
+  guard はこの規則を TypeScript 側（`core/`）に正式実装する。
 
 ## スコープ
 
-- `aro guard` サブコマンドの実装
-- `ai-improve.reusable.yml` の実装（AI 実行 → guard → gates → PR 作成）
-- 配布側 workflow への secrets 追記と distribution 更新
+- `aro guard` サブコマンドの実装（Stage 1）
+- `ai-review.reusable.yml` のエンジンを AI レビューから `aro guard` に差し替え（Stage 1）
+- ローカル改善ループの運用手順・ドキュメント整備と dogfooding（Stage 2）
+- `ai-improve` 系配布物（cron での AI 実行を前提にした workflow）の扱いの決定（Stage 2）
 
 ## 非スコープ
 
-- `auto_merge` の解禁（telemetry で成功率の実績が貯まるまで封印。`require_human_review: true` を維持）
-- 改善結果の蓄積・レポート（telemetry。Post-MVP Phase E）
-- Issue 起点の修正（`issue-fix.md` は配布済みだが、消費は改善ループ安定後）
+- **CI 内での AI 実行**（AI レビュー・AI 改善 PR の自動作成。方針転換により恒久的に非スコープ）
+- **`contents: write` の解禁**（CI 内で AI が push しないため不要になった。セキュリティ上も改善）
+- **secrets の配布**（`anthropic_api_key` の受け取り口は互換性契約として残すが、使わない）
+- `auto_merge` の解禁（ローカルループでも `require_human_review: true` を維持）
+- 改善結果の蓄積・レポート（telemetry。運用データ待ち）
+- Issue 起点の修正（`issue-fix.md` の消費は改善ループ安定後）
 
 ## 実装タスク
 
-### Stage 1: `aro guard`（policies の機械的 enforcement）
+### Stage 1-1: `aro guard`（policies の機械的 enforcement）
 
 ```bash
 aro guard --repo <path> --base <ref>   # <ref>..HEAD の diff を検証。CI では base branch を渡す
@@ -56,50 +77,97 @@ aro guard --repo <path> --base <ref>   # <ref>..HEAD の diff を検証。CI で
 
 - **読み取り専用**（diff を読むだけ。doctor と同じ思想）
 - 終了コード: `0`=違反なし / `1`=違反あり / `3`=unexpected error（doctor の設計に揃える）
-- `--json` で違反一覧を機械可読出力（rollout や telemetry から使えるように）
+- `--json` で違反一覧を機械可読出力（CI の step summary やローカルループから使えるように）
 - 判定ロジックは新設の `core/guard.ts` に置き、CLI から分離（doctor / diff と同じ構造）
+- `risk_level` → policy の選択ロジックも `core/` に実装し、workflow 内の shell 実装を将来こちらへ寄せる
 
-### Stage 2-1: `ai-improve.reusable.yml` の実装
+### Stage 1-2: `ai-review.reusable.yml` のエンジンを guard に差し替える
 
-ステップ構成（**guard と gates は AI 実行の外側**で走らせる。AI に自己申告させない）:
+互換性契約（inputs / secrets の名前）は維持したまま、job の中身を差し替える。
+**対象 repo は何も変更しなくてよい**（`@v1` 参照のまま、次の `v1` 移動で自動的に切り替わる）。
 
-1. checkout → 作業ブランチ作成（例: `ai-improve/<run-id>`）
-2. AI 実行: `improve.md` + `project.yaml` + policies を入力に改善を 1 つ実施させる
-3. `aro guard --repo . --base <default branch>` — **非 0 なら即 abort**（PR を作らない。
-   step summary に違反内容を出力し、`block_on: forbidden_path_modified` 等の発動として記録）
-4. `quality_gates.required` のコマンド（`commands.lint` / `commands.test` 等）を実行 — 失敗なら abort
-5. `gh pr create`。タイトル規約: `chore(ai-improve): <改善の要約>`（実装計画書 v3 の rollout 規約に準拠した形式）
-6. PR 本文に: 改善の目的 / 変更ファイル / guard・gates の結果 / AI が挙げた「次の改善候補」
+1. checkout（base との diff が取れる深さ）+ 中央 ai-repo-ops の checkout（`aro` を build して使う。
+   計画 04 のパッケージングが済めば installation に置き換え）
+2. `aro guard --repo . --base <PR base>` を実行
+3. 違反があれば job を fail させ、違反一覧を step summary（および可能なら PR コメント）に出力
+4. `secrets.anthropic_api_key` は受け取り口だけ残し（契約凍結のため）、使わない。
+   AI レビュー実装（claude-code-action 統合）は削除する
+5. permissions から `id-token: write` を外せるか確認（guard に OIDC は不要。
+   ただし配布側 `ai-review.yml` は `create_only` で既存 repo に残るため、
+   reusable 側が要求しなければ caller 側に余分な permission があっても害はない）
 
-### Stage 2-2: 配布・設定
+> 註: guard は「PR を block する」検証なので、AI レビュー（non-blocking）と違い required check に
+> してよい。ただし導入初期は警告のみ（fail させない）モードで様子を見る選択肢も残す。
+> 名称（`ai-review.yml` のまま guard を動かすか、将来 `guard.yml` に改名するか）は
+> `aro doctor` の WORKFLOW_SPECS・manifest の seed 定義とセットで実装時に決める
+> （改名は `create_only` の制約で既存 repo に自動反映されない点に注意）。
 
-- 配布側 `ai-improve.yml` に secrets 受け渡しを追記（計画 02 と同じ方式、`secrets: inherit` 不使用）
-- distribution 更新 → manifest version bump → リリース（計画 01 手順）→ dogfooding repo で sync
-- `ai.max_loops` の解釈を docs に明記: MVP では「1 実行 = 1 改善」とし、
-  ループ回数制御は harness 内リトライの上限として扱う
+### Stage 2-1: ローカル改善ループの運用設計
+
+CI の cron で AI を実行する代わりに、開発者が手元で回す:
+
+1. 開発者が対象 repo で Claude Code（等）を起動し、`.ai/managed/prompts/improve.md` を読み込ませる
+   （`improve.md` はローカル実行を前提にした文言へ改訂する: 「`gh pr create` する」等の手順は
+   開発者の権限・環境で行う前提に書き換え）
+2. AI が `project.yaml` + 適用 policy を読み、小さな改善を 1 つ実施
+3. **ローカルで自己検証**: `aro guard --repo . --base <default branch>` + `quality_gates.required` の
+   コマンドを実行。違反・失敗なら改善を破棄（または人間に相談）
+4. 開発者が内容を確認して PR を作成（開発者自身の GitHub 権限。CI 用の書き込み権限は一切増えない）
+5. CI 側では Stage 1-2 の guard workflow + 既存レビューサービス（CodeRabbit 等）が最終検証
+
+成果物:
+
+- `improve.md` のローカル実行向け改訂（distribution 更新 → sync で配布）
+- 運用手順のドキュメント（`docs/local-improve-loop.md` 等。起動方法・自己検証・PR 規約
+  `chore(ai-improve): <要約>` を記載）
+- 必要なら `aro` 側の補助（例: `aro guard --json` の出力をループが読みやすい形にする）。
+  専用サブコマンド（`aro improve`）の新設は、手動運用で痛みが実証されるまで見送る
+
+### Stage 2-2: `ai-improve` 系配布物の整理
+
+CI 内 AI 実行がなくなったため、cron 前提の `ai-improve` 系 workflow は役割を失う:
+
+- `ai-improve.reusable.yml`（stub）と配布側 `ai-improve.yml`（cron + dispatch）を**配布物から除く**か、
+  無害な stub のまま残すかを決める（`create_only` のため、除いても既存 repo からは消えない。
+  `aro doctor` の WORKFLOW_SPECS・manifest との整合もセットで変更する）
+- 判断基準: ローカル改善ループの dogfooding で「CI 側に改善系の workflow が必要になる場面」が
+  観測されるかどうか。観測されなければ次の distribution 更新で除く
+
+### Stage 2-3: dogfooding（計画 02 から引き継ぎ）
+
+- 実 repo 1〜2 個で: `aro init`（または sync）→ ローカル改善ループを数回実施 → guard / gates /
+  prompts の使い勝手を記録
+- distribution を 1 回以上更新して `aro diff` → `aro sync` を通す（配布 → 消費 → 改善 → 再配布の
+  ループを 1 周させる）
+- 気づき（プロンプトの精度・guard の誤検知/見逃し・doctor の WARN の妥当性・conflict の発生頻度）を
+  記録し、保留中の計画（conflict UX 等）の要否判断材料にする
 
 ## 受け入れ条件（DoD）
 
-### Stage 1（`aro guard`。ここまでで独立して merge 可能）
+### Stage 1（ここまでで独立して merge 可能）
 
 - [ ] 違反を含む diff（forbidden path 変更・`max_changed_files` 超過・managed file 編集）で
       `aro guard` が exit 1 と違反一覧を返す（ユニットテストで担保。AI は一切関与しない）
 - [ ] 違反のない diff で exit 0、`--json` が機械可読の結果を返す
+- [ ] PR を開くと guard が CI で実行され、違反が step summary に出る（API キー・secrets 不要）
+- [ ] 対象 repo 側の変更なしで（`v1` 移動のみで）guard ベースの CI に切り替わる
 
-### Stage 2（改善ループ）
+### Stage 2（ローカル改善ループ）
 
-- [ ] guard 違反時、PR は作成されず step summary に理由が出る
-- [ ] dogfooding repo で cron または手動起動から**AI 改善 PR が最低 1 件作られ、人間レビューを経て merge される**
-- [ ] gates（lint / test）失敗時に PR が作られない
+- [ ] 手元の Claude Code から `improve.md` を使った改善が 1 周回り、guard + gates の自己検証を経て
+      **人間レビュー済みの PR が最低 1 件 merge される**
+- [ ] ループ全体を通して、対象 repo にも中央にも新しい secrets・API キー・書き込み権限が増えていない
 - [ ] `auto_merge` がコード上どこからも呼ばれていない（封印の確認）
+- [ ] dogfooding の気づきが記録され、`improve.md` / policies の改訂に反映されて sync で配布される
 
 ## リスク / 未決事項
 
-- **`contents: write` の解禁**が本計画の本質的なリスク。緩和策: guard を AI 実行の外側に置く・
-  ブランチは `ai-improve/*` に限定・default branch への直 push を branch protection で禁止（対象 repo 側の
-  設定手順として docs に記載）。
-- **改善の質が低い場合**（無意味な PR の量産）: 週次 cron なので量は限定的。まず dogfooding repo で
-  数週間観察し、`improve.md` の「小さく安全な改善」の定義を調整する。
+- **guard の誤検知**: glob マッチの解釈（`allowed_paths` に無い新規ディレクトリの扱い等）が厳しすぎると
+  通常の開発を阻害する。導入初期は fail させず警告のみのモードを検討（Stage 1-2 の註参照）。
+- **ローカルループの再現性**: CI と違い実行環境が開発者ごとに異なる。guard / gates を「ローカルで通った」
+  ことは自己申告にせず、CI 側の guard で必ず再検証する（Stage 1-2 が先行する理由）。
+- **改善の質が低い場合**: ローカル実行なので人間が起動・確認する分、CI cron よりも無意味な PR は
+  出にくい。まず dogfooding で `improve.md` の「小さく安全な改善」の定義を調整する。
 - guard の diff 取得方法（`git diff --numstat` か libgit か）は実装時に決定。まずは git CLI で十分。
-- policy の選択ロジック（`risk_level` → `default` / `low-risk` / `security` のどれを適用するか）が
-  現状 schema 上で未接続。guard 実装時に `project.yaml` との対応規則を確定させる。
+- CI で `aro` を動かす方法（中央 repo checkout + build）は暫定。計画 04（パッケージング）が済んだら
+  差し替える。

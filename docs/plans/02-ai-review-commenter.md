@@ -2,6 +2,28 @@
 
 優先度: 高 / 前提: 計画 01 / 規模: 中
 
+> **⚠️ 方向転換（2026-07-05）: 実装は v0.1.1 で完了したが、dogfooding は中止する。**
+>
+> 実装（`ai-review.reusable.yml` の claude-code-action 統合・secrets 経路・`docs/ai-review.md`）は
+> v0.1.1 としてリリース済み。しかしオーナーの方針として以下が確定したため、本計画の残タスク
+> （dogfooding・フィードバックループ）は実施しない。
+>
+> - **従量課金 API キーで CI 上の AI を動かす方式を採らない**（PR ごとの課金が発生する構造にしない）
+> - **secrets（`ANTHROPIC_API_KEY`）を対象 repo ごとに配って管理する運用をしない**
+> - **自前の AI レビュー基盤を持たない**。PR レビューは既存サービス（CodeRabbit 等）に任せる
+> - フォーカスは「自律改善ループ」「リポジトリの質を上げる」方向（[計画 03 改訂版](./03-guard-and-improve-loop.md)）
+>
+> 実装済みの AI レビューは「API キー未登録なら明示 skip + workflow 成功」の設計のため、
+> **キーを登録しない限り何も起きず課金もゼロ**であり、配布済み repo に害はない。配布物からの
+> AI 呼び出しの撤去（`ai-review.yml` の guard ベース workflow への置き換え）は計画 03 改訂版の
+> スコープで扱う。
+>
+> 本計画の本来の目的だった「配布物（prompts / policies / `project.yaml`）の設計を実運用で検証する」は、
+> ローカル改善ループ（計画 03 改訂版 Stage 2）の dogfooding に引き継ぐ。
+> 実装から得られた再利用可能な資産: reusable workflow の互換性契約の設計（inputs / secrets 名の凍結）、
+> `risk_level` → policy のマッピング規則、fork PR / secrets 未設定時の skip パターン、
+> `create_only` seed file の更新が sync で届かないという運用知見。
+
 ## できるようになること
 
 | | Before（現状） | After（完了後） |

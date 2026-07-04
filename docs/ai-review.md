@@ -1,5 +1,12 @@
 # AI Review（PR レビューコメント自動化）
 
+> **⚠️ 方向転換（2026-07-05）**: この機能の dogfooding（`ANTHROPIC_API_KEY` の登録による有効化）は
+> **行わない**方針が確定した。CI で従量課金 API キーの AI を動かす方式・secrets を repo ごとに配る運用・
+> 自前レビュー基盤は採らない（経緯は [計画 02 の注記](./plans/02-ai-review-commenter.md)）。
+> API キー未登録なら明示 skip + workflow 成功のため、配布済み repo に害はない。今後この workflow の
+> エンジンは `aro guard`（AI 不要の機械検証）へ差し替える（[計画 03](./plans/03-guard-and-improve-loop.md)
+> Stage 1-2）。以下は v0.1.1 時点の実装の記録として残す。
+
 `ai-repo-ops` に参加している repo で PR を開くと、AI が diff をレビューして PR コメントを自動投稿する。このドキュメントは仕組み・有効化手順・挙動・セキュリティ設計をまとめる。実装は `.github/workflows/ai-review.reusable.yml`（中央 reusable workflow）と `distribution/base/files/.github/workflows/ai-review.yml`（配布側の入口）にある。
 
 ## アーキテクチャ
