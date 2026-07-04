@@ -2,7 +2,9 @@
 
 AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。
 
-> ステータス: **MVP 完了**（Phase 0〜7）。`aro init` / `aro diff` / `aro sync` / `aro doctor` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。
+> ステータス: **MVP 完了**（Phase 0〜7）。`aro init` / `aro diff` / `aro sync` / `aro doctor` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。リリース手順は [`RELEASE.md`](./RELEASE.md)、変更履歴は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
+
+現時点で配布される `ai-review` / `ai-improve` workflow（`.github/workflows/ai-review.reusable.yml` / `ai-improve.reusable.yml`）は、受け取った設定値を echo するだけの **stub** であり、AI によるレビュー・改善は行わない。本ツールが担うのは AI 運用基盤の**配布・更新・診断**（`aro init` / `diff` / `sync` / `doctor`）であり、AI 実行本体（レビューコメントの自動生成・改善 PR の自動作成）は Post-MVP（[`docs/plans/02-ai-review-commenter.md`](./docs/plans/02-ai-review-commenter.md) / [`docs/plans/03-guard-and-improve-loop.md`](./docs/plans/03-guard-and-improve-loop.md)）で実装する。
 
 ## Documentation
 
@@ -10,6 +12,7 @@ AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配
 - [`docs/sync-strategy.md`](./docs/sync-strategy.md) — canonical text・checksum・conflict判定・atomicity・コマンド終了コード
 - [`docs/security.md`](./docs/security.md) — path traversal / symlink / 固定保護path / workflow permissions
 - [`docs/existing-tools.md`](./docs/existing-tools.md) — Copier / Cruft との関係、自作する理由、再評価ポイント
+- [`docs/plans/`](./docs/plans/) — Post-MVP 計画書（AI 実行本体・fleet 展開など）
 
 ## Development
 
