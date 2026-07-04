@@ -151,6 +151,19 @@ git pull origin main
    git commit -m "chore(release): bump version to X.Y.Z"
    ```
 
+5. commit 後、タグ発行前にもう一段の自動検証を行う（上記 3. の手動再確認を機械的に裏付ける）。
+
+   ```bash
+   pnpm release:check --pre-tag
+   ```
+
+   - `--pre-tag` を付けるのは、この時点ではまだ `vX.Y.Z` / `v1` タグを発行していないため
+     （タグ発行後の検証項目は §7 で `--pre-tag` 無しで実行する）。
+   - チェック内容: `package.json`（root）と `packages/aro-cli/package.json` の `version` 一致・
+     `distribution/base/manifest.yaml` の `version` が semver 形式であること・`CHANGELOG.md` に
+     該当 version のセクションが存在すること。
+   - 1 つでも FAIL があれば、該当箇所（1.〜4.）を修正してからやり直す。
+
 ## 6. タグ発行 → `v1` 移動 → push
 
 （例: 初回リリースでは `vX.Y.Z` = `v0.1.0`。以下の `vX.Y.Z` は実際のバージョン文字列に置き換える。
@@ -189,11 +202,14 @@ git push origin v2
 ## 7. リリース後確認
 
 ```bash
-git ls-remote --tags origin
+pnpm release:check
 ```
 
-- `vX.Y.Z` と `v1` の両方が表示され、`v1` が今回発行した `vX.Y.Z` と同じ commit SHA を指していることを
-  確認する。
+- `--pre-tag` を付けずに実行する（§5 と異なり、この時点では `vX.Y.Z` / moving tag が発行済み）。
+- 検証内容: §5 の a〜c（version 整合・CHANGELOG）に加え、`vX.Y.Z` タグが origin に存在すること、
+  および配布中の `ai-review.yml` / `ai-improve.yml` が参照する moving tag（通常 `v1`）が origin の
+  `vX.Y.Z` と同じ commit を指すこと。1 つでも FAIL があれば、moving tag の付け替え漏れ等
+  §6 の手順に戻って修正する（`git ls-remote --tags origin` で生の tag 一覧も直接確認できる）。
 - 可能であれば、`aro init` 済みの実 repo で PR を作成し `AI Review` workflow が緑で完了すること、
   および `AI Improve` workflow を `workflow_dispatch` から起動して緑で完了することを確認する
   （中身は stub の echo のままでよい。動くこと自体の確認）。
@@ -210,12 +226,14 @@ git ls-remote --tags origin
 
 - **moving tag（`v1`）の付け替え忘れ**: `v1` の force-push を忘れると、「`vX.Y.Z` を出したのに対象 repo
   は古い reusable workflow のまま」という静かなズレが発生する（対象 repo 側は `@v1` を解決するだけなので
-  中央側の tag 移動漏れに気づけない）。初回リリースは本ドキュメントの手動チェックリスト（§6・§7）で
-  防ぎ、**2 回目のリリース前に `release:check` スクリプトとして自動化する予定**（未実装。本リリースの
-  スコープ外）。想定する検証項目:
-  - `package.json` / `packages/aro-cli/package.json` / `distribution/base/manifest.yaml` の `version` 一致
+  中央側の tag 移動漏れに気づけない）。**自動化済み**（`pnpm release:check`。実体は
+  [`scripts/release-check.mjs`](./scripts/release-check.mjs)）。§5 では `--pre-tag` 付きで
+  version/CHANGELOG 整合のみを、§7 ではフルで origin タグの整合まで検証する。検証項目:
+  - `package.json` / `packages/aro-cli/package.json` の `version` 一致（`distribution/base/manifest.yaml`
+    は §0 の 2 層契約により別軸のため、semver として妥当かのみ確認し一致は求めない）
   - `CHANGELOG.md` に該当 version のセクションが存在すること
-  - `vX.Y.Z` タグがリモートに存在すること
-  - `v1` タグが期待する commit（＝最新の `vX.Y.Z` タグと同じ commit）を指していること
+  - `vX.Y.Z` タグが origin に存在すること
+  - 配布中の `ai-review.yml` / `ai-improve.yml` が参照する moving tag（通常 `v1`）が、期待する commit
+    （＝最新の `vX.Y.Z` タグと同じ commit）を指していること
 - **GitHub Releases の発行有無**: `v0.1.0` はタグのみで発行し GitHub Releases は作らないと決定済み
   （§7）。以降のリリースでリリースノート公開が必要になれば再検討する。
