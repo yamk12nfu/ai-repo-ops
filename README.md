@@ -4,13 +4,14 @@ AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配
 
 > ステータス: **MVP 完了**（Phase 0〜7）。`aro init` / `aro diff` / `aro sync` / `aro doctor` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。リリース手順は [`RELEASE.md`](./RELEASE.md)、変更履歴は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
 
-現時点で配布される `ai-review` / `ai-improve` workflow（`.github/workflows/ai-review.reusable.yml` / `ai-improve.reusable.yml`）は、受け取った設定値を echo するだけの **stub** であり、AI によるレビュー・改善は行わない。本ツールが担うのは AI 運用基盤の**配布・更新・診断**（`aro init` / `diff` / `sync` / `doctor`）であり、AI 実行本体（レビューコメントの自動生成・改善 PR の自動作成）は Post-MVP（[`docs/plans/02-ai-review-commenter.md`](./docs/plans/02-ai-review-commenter.md) / [`docs/plans/03-guard-and-improve-loop.md`](./docs/plans/03-guard-and-improve-loop.md)）で実装する。
+`ai-review` workflow（`.github/workflows/ai-review.reusable.yml`）は実装済みで、参加 repo で PR を開くと AI レビューコメントが自動で付く（read-only。書き込みは PR コメントのみ）。有効化手順・挙動・セキュリティ設計は [`docs/ai-review.md`](./docs/ai-review.md) を参照。一方 `ai-improve` workflow（`ai-improve.reusable.yml`）は引き続き、受け取った設定値を echo するだけの **stub** であり、改善 PR の自動作成は行わない。本ツールが担うのは AI 運用基盤の**配布・更新・診断**（`aro init` / `diff` / `sync` / `doctor`）であり、`ai-improve` の実装は Post-MVP（[`docs/plans/03-guard-and-improve-loop.md`](./docs/plans/03-guard-and-improve-loop.md)）で行う。
 
 ## Documentation
 
 - [`docs/distribution.md`](./docs/distribution.md) — manifest / strategy / distribution content hash / authoritative schema
 - [`docs/sync-strategy.md`](./docs/sync-strategy.md) — canonical text・checksum・conflict判定・atomicity・コマンド終了コード
 - [`docs/security.md`](./docs/security.md) — path traversal / symlink / 固定保護path / workflow permissions
+- [`docs/ai-review.md`](./docs/ai-review.md) — AI レビューコメンターの有効化手順・挙動・セキュリティ設計
 - [`docs/existing-tools.md`](./docs/existing-tools.md) — Copier / Cruft との関係、自作する理由、再評価ポイント
 - [`docs/plans/`](./docs/plans/) — Post-MVP 計画書（AI 実行本体・fleet 展開など）
 
