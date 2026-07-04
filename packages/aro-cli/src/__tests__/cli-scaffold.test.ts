@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { ARO_CLI_VERSION, buildProgram } from "../main.js";
 
 describe("aro CLI scaffold", () => {
-  it("MVPの4サブコマンドを登録している", () => {
+  it("MVPの5サブコマンドを登録している", () => {
     const program = buildProgram();
     const names = program.commands.map((command) => command.name()).sort();
-    expect(names).toEqual(["diff", "doctor", "init", "sync"]);
+    expect(names).toEqual(["diff", "doctor", "guard", "init", "sync"]);
   });
 
   it("--help に各コマンドと概要を含む", () => {
@@ -15,6 +15,7 @@ describe("aro CLI scaffold", () => {
     expect(help).toContain("diff");
     expect(help).toContain("sync");
     expect(help).toContain("doctor");
+    expect(help).toContain("guard");
     expect(help).toContain("aro");
   });
 
@@ -28,5 +29,12 @@ describe("aro CLI scaffold", () => {
     expect(diff).toBeDefined();
     const help = diff?.helpInformation() ?? "";
     expect(help).toContain("--detailed-exitcode");
+  });
+
+  it("guard は必須の --base オプションを持つ", () => {
+    const guard = buildProgram().commands.find((command) => command.name() === "guard");
+    expect(guard).toBeDefined();
+    const help = guard?.helpInformation() ?? "";
+    expect(help).toContain("--base <ref>");
   });
 });
