@@ -10,6 +10,13 @@
  * しきい値次第で結果が変わり得るため、guard の判定（forbidden_paths 等の単純な path 一致）を
  * 曖昧にしないよう明示的に無効化する。
  *
+ * `-z` を付けて NUL 区切り出力にする。git は既定（`core.quotePath=true`）で非 ASCII バイトを含む
+ * path を `--numstat` の通常出力上 C-style quote + 8 進エスケープする
+ * （例: `docs/日本語.md` → `"docs/\346\227\245\346\234\254.md"`）。これを素の tab 区切りとして
+ * path 列をそのまま返すと、forbidden_paths / allowed_paths の picomatch 判定がエスケープ済み文字列に
+ * 対して行われてしまい、非 ASCII path の判定が壊れる。`-z` はこの quote を無効化し、
+ * 生の path バイト列を `\0` 終端で返すため、非 ASCII path も正しく取得できる。
+ *
  * core/guard.ts（判定ロジック）とはあえて分離している。guard.ts は git 実行を知らない純粋関数のまま
  * テストでき、git 実行に依存するテスト（実 git repo が必要）はこのモジュールに閉じ込められる。
  */
@@ -43,16 +50,17 @@ function extractStderr(error: unknown): string | undefined {
 }
 
 /**
- * numstat 1 行を parse する。列は `<added>\t<deleted>\t<path>`（tab 区切り）。
+ * numstat 1 レコードを parse する。`-z` 出力の 1 レコードは `<added>\t<deleted>\t<path>`
+ * （tab 区切り、`\0` 終端。`--no-renames` 指定済みのため rename 特殊形式・2 個目の NUL 終端 path は出ない）。
  * path 自体に tab を含むことは実運用上ありえないが、3 列目以降を join して保守的に扱う。
  */
-function parseNumstatLine(line: string): GitDiffEntry {
-  const [addedRaw, deletedRaw, ...pathParts] = line.split("\t");
+function parseNumstatRecord(record: string): GitDiffEntry {
+  const [addedRaw, deletedRaw, ...pathParts] = record.split("\t");
   const path = pathParts.join("\t");
   if (addedRaw === undefined || deletedRaw === undefined || path.length === 0) {
     throw new GitDiffError(
       "GIT_DIFF_PARSE",
-      `git diff --numstat の出力行を解釈できません: ${JSON.stringify(line)}`,
+      `git diff --numstat -z の出力レコードを解釈できません: ${JSON.stringify(record)}`,
     );
   }
   return {
@@ -62,13 +70,12 @@ function parseNumstatLine(line: string): GitDiffEntry {
   };
 }
 
-/** numstat 出力全体を parse する（空行は無視）。 */
+/** `-z` 出力全体を `\0` で分割して parse する（末尾の空レコードは無視）。 */
 function parseNumstat(stdout: string): GitDiffEntry[] {
   return stdout
-    .split("\n")
-    .map((line) => line.replace(/\r$/, ""))
-    .filter((line) => line.length > 0)
-    .map((line) => parseNumstatLine(line));
+    .split("\0")
+    .filter((record) => record.length > 0)
+    .map((record) => parseNumstatRecord(record));
 }
 
 /**
@@ -84,7 +91,7 @@ export async function getChangedFiles(repoRoot: string, base: string): Promise<G
   try {
     const result = await execFileAsync(
       "git",
-      ["-C", repoRoot, "diff", "--numstat", "--no-renames", `${base}...HEAD`],
+      ["-C", repoRoot, "diff", "--numstat", "-z", "--no-renames", `${base}...HEAD`],
       { encoding: "utf8" },
     );
     stdout = result.stdout;

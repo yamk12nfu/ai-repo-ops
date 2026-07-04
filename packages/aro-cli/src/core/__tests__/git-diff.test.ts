@@ -11,7 +11,7 @@ import {
   gitCheckoutNewBranch,
   gitCommitAll,
   initRealGitRepo,
-} from "../../test-support/git-fixture.js";
+} from "../../test-support/git.fixture.js";
 
 let repoRoot: string;
 
@@ -68,6 +68,17 @@ describe("getChangedFiles: 通常の numstat parse", () => {
 
     const entries = await getChangedFiles(repoRoot, "main");
     expect(entries).toEqual([]);
+  });
+
+  it("非 ASCII path は core.quotePath による C-style quote を受けず生の path で取得できる（-z）", async () => {
+    await writeRaw(repoRoot, "base.txt", "base\n");
+    await gitCommitAll(repoRoot, "init");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, "docs/日本語.md", "こんにちは\n");
+    await gitCommitAll(repoRoot, "docs: 日本語ファイルを追加");
+
+    const entries = await getChangedFiles(repoRoot, "main");
+    expect(entries).toEqual([{ path: "docs/日本語.md", addedLines: 1, deletedLines: 0 }]);
   });
 });
 
