@@ -63,16 +63,19 @@ manifest が参照する `src` / `template` ファイル、および authoritati
 
 ## GitHub Actions workflow の permissions
 
-配布する workflow stub は permissions を明示する。
+配布する workflow は permissions を明示する。
 
 ```yaml
 permissions:
   contents: read
   pull-requests: write
   issues: write
+  id-token: write
 ```
 
 `ai-review` workflow は `contents: write` を持つべきではない（`aro doctor` が top-level / job 単位いずれの permissions でも `contents: write` あるいは `write-all` を検出すると **FAIL** にする）。`ai-improve` workflow は PR 作成のために `contents: write` を持つ想定だが、main への直接 push は禁止する運用前提とし、`aro doctor` では **WARN** に留める。
+
+`id-token: write` は `ai-review` の AI レビューエンジン（`claude-code-action`）の既定認証（OIDC 経由の短命トークン発行）に必要なため付与している。`contents: write` を与えない方針には影響せず、`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
 
 `aro doctor` は次も検査する。
 
@@ -85,7 +88,9 @@ central reusable workflow（yamk12nfu/ai-repo-ops/.github/workflows/<file>）を
 
 ## secret / token
 
-MVP では secret を扱わない。将来 reusable workflow へ secrets を渡す場合は、明示的な `workflow_call.secrets` のみを許可し、`secrets: inherit` は原則避ける方針とする（`ai-repo-ops-implementation-plan-v3.md` §20.5）。
+`ai-review` の reusable workflow（`ai-review.reusable.yml`）は `workflow_call.secrets.anthropic_api_key` を明示的に受け取る。配布側 `ai-review.yml` も `secrets: { anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} }` のように明示的に渡しており、`secrets: inherit` は使わない方針を維持している（`ai-repo-ops-implementation-plan-v3.md` §20.5）。
+
+fork PR には GitHub の仕様上 secrets が渡らないため、AI レビューは明示的に skip される（workflow 自体は成功する）。詳細は [`ai-review.md`](./ai-review.md) を参照。
 
 ## managed file 誤編集からの復旧
 

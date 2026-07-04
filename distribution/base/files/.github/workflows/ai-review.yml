@@ -8,6 +8,8 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  # AI レビューエンジンのデフォルト認証（OIDC）に必要。contents: write は与えない。
+  id-token: write
 
 jobs:
   ai_review:
@@ -15,3 +17,8 @@ jobs:
     with:
       config_path: ".ai/project.yaml"
       lock_path: ".ai/ai-repo-ops.lock.yaml"
+    # secrets: inherit は使わない（明示的な受け渡しのみ許可する方針）。
+    # ANTHROPIC_API_KEY は対象 repo の Actions secrets に登録する。
+    # 未登録・fork PR の場合、AI レビューは明示的に skip される（workflow は成功する）。
+    secrets:
+      anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
