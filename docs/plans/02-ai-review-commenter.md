@@ -37,6 +37,11 @@
 
 1. **エンジンを選定する**。推奨: `anthropics/claude-code-action`（GitHub Action として保守されており、
    PR コメント投稿まで面倒を見る）。代替: `claude` CLI を直接実行して `gh pr comment` で投稿。
+   - **エンジン選択は中央 repo の内部実装である**。対象 repo が参照するのは reusable workflow（`@v1`）
+     だけなので、エンジンの差し替えは中央側の変更のみで完結し、配布物の更新・対象 repo の sync は不要。
+   - 凍結すべき互換性契約は **`workflow_call` の inputs / secrets の名前**（ここを変えると全対象 repo の
+     sync が必要になる）。この境界を reusable workflow 冒頭のコメントに明記する。
+     adapter 層のような追加の抽象化は作らない。
 2. **`ai-review.reusable.yml` を実装する**:
    - checkout（`fetch-depth` は base との diff が取れる深さ）
    - `.ai/project.yaml` と `.ai/managed/prompts/review.md` を読み、PR diff とともにエンジンへ渡す
@@ -66,6 +71,8 @@
 - [ ] コメント内容に `project.yaml` の設定（例: forbidden path への変更検知）が反映されている
 - [ ] workflow の書き込み権限が `pull-requests` / `issues` に限定されている（`contents: write` なし）
 - [ ] AI レビュー失敗時も PR の merge が block されない
+- [ ] fork からの PR では AI レビューが**明示的に skip** され、workflow 自体は成功する
+      （skip 理由が step summary に出る）
 - [ ] distribution 更新 → 対象 repo で `aro sync` → 新しい workflow / prompt が反映される、が 1 周している
 - [ ] dogfooding の気づきが記録され、保留中の計画（conflict UX 等）の要否判断材料になっている
 
@@ -77,4 +84,7 @@
   （書き込みは PR コメントのみ・secrets は API key のみ）がこのリスクの主な緩和策であり、
   **この設計を崩す変更（書き込み権限の追加）は計画 03 の guard 実装とセットでのみ行う**。
 - fork からの PR では secrets が渡らない（GitHub の仕様）。dogfooding は自分の repo のみなので
-  MVP では「fork PR ではスキップ」で良い。挙動を workflow 内で明示すること。
+  MVP では「fork PR では明示的に skip」で良い（DoD 参照）。
+- **`pull_request_target` は使わない**。secrets を持ったまま fork のコードを扱える trigger であり、
+  典型的な事故源。fork PR への対応が本当に必要になった時点で、checkout 対象と権限を
+  別途セキュリティレビューした上で判断する（それまでは `pull_request` のまま自 repo の PR のみ対応）。

@@ -1,6 +1,9 @@
 # 計画 03: `aro guard` + 改善ループ — 半自律の AI 改善 PR
 
-優先度: 高 / 前提: 計画 01, 02 / 規模: 大
+優先度: 高 / 前提: 計画 01, 02 / 規模: 大（**Stage 1 / Stage 2 に分割し、別 PR で実装する**）
+
+- **Stage 1: `aro guard`** — AI 不要。fixture repo に diff を作ればテストが完結する独立実装
+- **Stage 2: 改善ループ** — Stage 1 が安定してから。`contents: write` の解禁はこの段階のみ
 
 ## できるようになること
 
@@ -35,7 +38,7 @@
 
 ## 実装タスク
 
-### 1. `aro guard`（policies の機械的 enforcement）
+### Stage 1: `aro guard`（policies の機械的 enforcement）
 
 ```bash
 aro guard --repo <path> --base <ref>   # <ref>..HEAD の diff を検証。CI では base branch を渡す
@@ -56,7 +59,7 @@ aro guard --repo <path> --base <ref>   # <ref>..HEAD の diff を検証。CI で
 - `--json` で違反一覧を機械可読出力（rollout や telemetry から使えるように）
 - 判定ロジックは新設の `core/guard.ts` に置き、CLI から分離（doctor / diff と同じ構造）
 
-### 2. `ai-improve.reusable.yml` の実装
+### Stage 2-1: `ai-improve.reusable.yml` の実装
 
 ステップ構成（**guard と gates は AI 実行の外側**で走らせる。AI に自己申告させない）:
 
@@ -68,7 +71,7 @@ aro guard --repo <path> --base <ref>   # <ref>..HEAD の diff を検証。CI で
 5. `gh pr create`。タイトル規約: `chore(ai-improve): <改善の要約>`（実装計画書 v3 の rollout 規約に準拠した形式）
 6. PR 本文に: 改善の目的 / 変更ファイル / guard・gates の結果 / AI が挙げた「次の改善候補」
 
-### 3. 配布・設定
+### Stage 2-2: 配布・設定
 
 - 配布側 `ai-improve.yml` に secrets 受け渡しを追記（計画 02 と同じ方式、`secrets: inherit` 不使用）
 - distribution 更新 → manifest version bump → リリース（計画 01 手順）→ dogfooding repo で sync
@@ -77,8 +80,14 @@ aro guard --repo <path> --base <ref>   # <ref>..HEAD の diff を検証。CI で
 
 ## 受け入れ条件（DoD）
 
+### Stage 1（`aro guard`。ここまでで独立して merge 可能）
+
 - [ ] 違反を含む diff（forbidden path 変更・`max_changed_files` 超過・managed file 編集）で
-      `aro guard` が exit 1 と違反一覧を返す（ユニットテストで担保）
+      `aro guard` が exit 1 と違反一覧を返す（ユニットテストで担保。AI は一切関与しない）
+- [ ] 違反のない diff で exit 0、`--json` が機械可読の結果を返す
+
+### Stage 2（改善ループ）
+
 - [ ] guard 違反時、PR は作成されず step summary に理由が出る
 - [ ] dogfooding repo で cron または手動起動から**AI 改善 PR が最低 1 件作られ、人間レビューを経て merge される**
 - [ ] gates（lint / test）失敗時に PR が作られない

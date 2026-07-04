@@ -66,5 +66,8 @@
 
 - **moving tag (`v1`) の force-push 運用**は GitHub Actions の reusable workflow 参照では一般的だが、
   タグの付け替えを忘れると「`v0.2.0` を出したのに対象 repo は古い workflow のまま」という
-  静かなズレが起きる。`RELEASE.md` のチェックリスト項目にすることで防ぐ（自動化は保留）。
+  静かなズレが起きる。**初回リリースは `RELEASE.md` の手動チェックリストで防ぎ、
+  2 回目のリリース前に `release:check` スクリプトとして自動化する。** 検証項目:
+  `package.json` / `packages/aro-cli/package.json` / `distribution/base/manifest.yaml` の version 一致、
+  CHANGELOG に該当 version の記載、`vX.Y.Z` タグの存在、`v1` が期待 commit を指していること。
 - リリースを GitHub Releases として発行するか（タグのみで済ますか）は初回リリース時に判断。
