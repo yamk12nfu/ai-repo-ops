@@ -11,11 +11,11 @@ AI）でもリリース作業を再現できることを目的とする。前提
 - リモートは `origin` = `github.com:yamk12nfu/ai-repo-ops`。
 - リリースの起点は `main` ブランチの HEAD（作業ブランチで作業していた場合は先に PR を merge しておく。
   merge 後にローカル `main` を最新へ追従させる手順は §5 冒頭を参照）。
-- バージョン番号は次の 3 箇所に**同じ値**を持たせる。リリースのたびに整合を確認する。
-  - `package.json`（root）の `version`
-  - `packages/aro-cli/package.json` の `version`
-  - `distribution/base/manifest.yaml` の `version`（distribution の内容が変わった時だけ意味を持つ。
-    詳細は §4 参照）
+- バージョンの契約は 2 層に分かれる。リリースのたびに整合を確認する。
+  - `package.json`（root）と `packages/aro-cli/package.json` の `version` は**常に一致**させる
+    （リリースバージョンそのもの。§5 で bump する）。
+  - `distribution/base/manifest.yaml` の `version` は上記 2 つとは別軸で、**distribution の内容が
+    変わったリリースでのみ**更新する（変更が無いリリースでは bump しない。詳細は §4 参照）。
 - 特に断りが無い限り、以下のコマンドはすべてこのリポジトリの root ディレクトリで実行する。
 
 ## 1. タグ戦略
@@ -153,23 +153,37 @@ git pull origin main
 
 ## 6. タグ発行 → `v1` 移動 → push
 
-（例: 初回リリースでは `vX.Y.Z` = `v0.1.0`。以下の `vX.Y.Z` は実際のバージョン文字列に置き換える。）
+（例: 初回リリースでは `vX.Y.Z` = `v0.1.0`。以下の `vX.Y.Z` は実際のバージョン文字列に置き換える。
+moving tag の扱いは §1 で判定した「通常のリリース」か「`v2` への切り上げリリース」かで分岐する。
+**下の 2 パターンのうち該当する方だけを実行する（両方実行しない）**。）
+
+まず共通の手順（不変タグの発行と push）を行う。
 
 ```bash
 # 1. リリース対象 commit（通常は上記 version bump commit）の SHA を確認
 RELEASE_SHA="$(git rev-parse HEAD)"
 
-# 2. 不変タグを発行する
+# 2. 不変タグを発行して push する
 git tag vX.Y.Z "$RELEASE_SHA"
-
-# 3. v1（moving tag）を同じ commit へ付け替える
-#    （v2 に切り上げるリリースの場合は代わりに v2 を新規発行し、v1 は動かさない。§1 参照）
-git tag -f v1 "$RELEASE_SHA"
-
-# 4. まとめて push（tag の push は明示的に指定しないと送られない）
 git push origin main
 git push origin vX.Y.Z
+```
+
+続いて moving tag を、リリース種別に応じてどちらか一方だけ実行する。
+
+**通常のリリース**（reusable workflow に破壊的変更が無い。§1 参照）: `v1` を今回の commit へ付け替える。
+
+```bash
+git tag -f v1 "$RELEASE_SHA"
 git push -f origin v1
+```
+
+**`v2` への切り上げリリース**（§1 の破壊的変更に該当する場合のみ）: `v1` には一切触れず、`v2` を
+新規発行する。
+
+```bash
+git tag v2 "$RELEASE_SHA"
+git push origin v2
 ```
 
 ## 7. リリース後確認
