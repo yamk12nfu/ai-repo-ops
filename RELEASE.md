@@ -9,7 +9,8 @@ AI）でもリリース作業を再現できることを目的とする。前提
 - pnpm workspace。root `ai-repo-ops`（private・npm 非公開）と `packages/aro-cli`
   （`@ai-repo-ops/aro-cli`）から成る。詳細は [`README.md`](./README.md) を参照。
 - リモートは `origin` = `github.com:yamk12nfu/ai-repo-ops`。
-- リリースの起点は `main` ブランチの HEAD（作業ブランチで作業していた場合は先に PR を merge しておく）。
+- リリースの起点は `main` ブランチの HEAD（作業ブランチで作業していた場合は先に PR を merge しておく。
+  merge 後にローカル `main` を最新へ追従させる手順は §5 冒頭を参照）。
 - バージョン番号は次の 3 箇所に**同じ値**を持たせる。リリースのたびに整合を確認する。
   - `package.json`（root）の `version`
   - `packages/aro-cli/package.json` の `version`
@@ -113,6 +114,17 @@ git diff <直前の vX.Y.Z タグ>..HEAD -- distribution/
 この節が意味を持つ。）
 
 ## 5. package.json の version bump / CHANGELOG 追記
+
+作業ブランチで PR を作っていた場合、GitHub 上で merge しただけではローカルの `main` は追従しない
+（ローカル `main` は merge 前の古い commit を指したまま）。この状態で version bump commit を作ると、
+意図しない（＝実際に merge された内容と異なる）commit の上にタグを付けてしまう、あるいは push 時に
+「remote に無い分岐」として reject される。**version bump commit を作る前に、必ずローカル `main` を
+`origin/main` の最新へ追従させる。**
+
+```bash
+git checkout main
+git pull origin main
+```
 
 1. 次の 2 ファイルの `version` を新しいリリースバージョン（`X.Y.Z`）に揃えて更新する。
    - `package.json`（root）
