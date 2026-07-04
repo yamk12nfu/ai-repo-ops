@@ -75,7 +75,7 @@ pnpm build
 
 # 3. init → doctor → diff → sync を通す
 pnpm aro init --repo "$SMOKE_REPO"
-pnpm aro doctor --repo "$SMOKE_REPO"
+pnpm aro doctor --repo "$SMOKE_REPO"; echo "doctor exit=$?"
 pnpm aro diff --repo "$SMOKE_REPO" --detailed-exitcode; echo "diff exit=$?"
 pnpm aro sync --repo "$SMOKE_REPO"; echo "sync exit=$?"
 
@@ -85,7 +85,7 @@ rm -rf "$SMOKE_REPO"
 
 **合格基準**（いずれか 1 つでも満たさなければリリースを止めて原因調査する）:
 
-- `aro doctor` の出力に `FAIL` が 1 件も無い（終了コード `0`）。
+- `aro doctor` の出力に `FAIL` が 1 件も無い（上の `doctor exit=$?` が **`0`**）。
 - `aro diff --detailed-exitcode` の終了コード（上の `diff exit=$?`）が **`0`**
   （`init` 直後は distribution と repo が完全に一致しているはずなので、差分は無いのが正しい）。
 - `aro sync` が conflict なく完了する（終了コード `0`。`init` 直後で差分が無いため
@@ -126,18 +126,30 @@ git checkout main
 git pull origin main
 ```
 
-1. 次の 2 ファイルの `version` を新しいリリースバージョン（`X.Y.Z`）に揃えて更新する。
+1. 次のファイルの `version` を新しいリリースバージョン（`X.Y.Z`）に揃えて更新する。
    - `package.json`（root）
    - `packages/aro-cli/package.json`
+   - `distribution/base/manifest.yaml` — **§4 で distribution に変更があると判定した場合のみ**。
+     すでに §4 で bump 済みならここでの追加作業は無い（bump し忘れていた場合はここで行う）。
 2. [`CHANGELOG.md`](./CHANGELOG.md) を編集する（[Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) 形式）。
    - `## [Unreleased]` の内容を `## [X.Y.Z] - YYYY-MM-DD`（リリース日）の新セクションへ切り出す。
    - `## [Unreleased]` セクションは空のまま残す（次のリリースまでの変更を追記していく場所）。
    - ファイル末尾の比較リンク（`[Unreleased]: .../compare/vX.Y.Z...HEAD` /
-     `[X.Y.Z]: .../releases/tag/vX.Y.Z`）を追加・更新する。
+     `[X.Y.Z]: .../tree/vX.Y.Z`）を追加・更新する（GitHub Releases は発行しないため、タグだけで
+     解決できる `tree/vX.Y.Z` へのリンクにする。§7 参照）。
 3. §4 の version 一致を再確認する: `package.json` / `packages/aro-cli/package.json` /
    `distribution/base/manifest.yaml`（distribution に変更があった場合のみ）の `version` と、
    `CHANGELOG.md` に追記した version が一致していること。
-4. 上記の変更を commit する（例: `chore(release): bump version to X.Y.Z`）。
+4. 変更したファイルを commit する。**§4 で `distribution/base/manifest.yaml` を編集した場合は、
+   version bump commit に必ず含める**（別 commit・別タイミングに分けると、実際にタグが指す commit に
+   manifest bump が入らず、§4 での作業が無かったことになってしまう）。
+
+   ```bash
+   git add package.json packages/aro-cli/package.json CHANGELOG.md
+   # distribution/base/manifest.yaml を編集した場合（§4）は必ず追加する
+   git add distribution/base/manifest.yaml
+   git commit -m "chore(release): bump version to X.Y.Z"
+   ```
 
 ## 6. タグ発行 → `v1` 移動 → push
 
@@ -172,11 +184,13 @@ git ls-remote --tags origin
   および `AI Improve` workflow を `workflow_dispatch` から起動して緑で完了することを確認する
   （中身は stub の echo のままでよい。動くこと自体の確認）。
 
-### GitHub Releases として発行するか（未決事項）
+### GitHub Releases は発行しない（決定事項）
 
-タグ発行のみで済ますか、GitHub Releases（`gh release create vX.Y.Z --notes-file ...` 等でリリースノートを
-公開）まで行うかは、初回リリース（`0.1.0`）実施時に判断する。本ドキュメントでは手順を固定せず、
-判断が決まり次第この節を更新する。
+`v0.1.0` はタグ（`v0.1.0` / `v1`）のみを発行し、GitHub Releases は作成しない。`CHANGELOG.md` が
+リリースノートの役割を兼ねる（そのため CHANGELOG 内の各バージョンへのリンクも
+`releases/tag/vX.Y.Z` ではなく、タグだけで解決できる `tree/vX.Y.Z` にしている）。以降のリリースで
+リリースノートの公開が必要になった場合は、その時点で `gh release create vX.Y.Z --notes-file ...`
+等による発行を再検討する。
 
 ## リスク / 未決事項
 
@@ -189,4 +203,5 @@ git ls-remote --tags origin
   - `CHANGELOG.md` に該当 version のセクションが存在すること
   - `vX.Y.Z` タグがリモートに存在すること
   - `v1` タグが期待する commit（＝最新の `vX.Y.Z` タグと同じ commit）を指していること
-- **GitHub Releases の発行有無**: 上記の通り未決。初回リリース実施時に判断する。
+- **GitHub Releases の発行有無**: `v0.1.0` はタグのみで発行し GitHub Releases は作らないと決定済み
+  （§7）。以降のリリースでリリースノート公開が必要になれば再検討する。

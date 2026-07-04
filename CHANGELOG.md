@@ -5,6 +5,10 @@
 形式は [Keep a Changelog](https://keepachangelog.com/ja/1.1.0/) に、
 バージョニングは [Semantic Versioning](https://semver.org/lang/ja/) に準拠する。
 
+（`### Known Issues` は Keep a Changelog の標準カテゴリ（Added / Changed / Deprecated / Removed /
+Fixed / Security）には無い、このプロジェクトの意図的な拡張。リリース時点で既知の・次のリリースで
+解消予定の問題を明示するために使う。）
+
 ## [Unreleased]
 
 （次回リリースに向けた変更をここに追記する）
@@ -57,4 +61,4 @@ echo するだけの stub。** AI 実行の実装は Post-MVP（[計画 02](./do
   本リリース（`v0.1.0` タグ発行 + `v1` 移動）で解消する。
 
 [Unreleased]: https://github.com/yamk12nfu/ai-repo-ops/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/yamk12nfu/ai-repo-ops/releases/tag/v0.1.0
+[0.1.0]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.1.0
