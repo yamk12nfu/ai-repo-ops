@@ -55,7 +55,7 @@
 - policies の機械的 enforcement（`aro guard`。→ 計画 03。本計画ではプロンプトに含めて AI に渡すのみ）
 - レビュー結果の蓄積（telemetry。運用データ待ち）
 
-## 実装タスク
+## 実装タスク（記録。タスク 1〜4 は v0.1.1 で完了、タスク 5〜6 は方向転換により実施しない）
 
 1. **エンジンを選定する**。推奨: `anthropics/claude-code-action`（GitHub Action として保守されており、
    PR コメント投稿まで面倒を見る）。代替: `claude` CLI を直接実行して `gh pr comment` で投稿。
@@ -79,15 +79,15 @@
    - distribution 更新に伴い `manifest.yaml` の version bump + リリース（計画 01 の手順で `v0.1.x`）
 4. **失敗時の扱いを決める**: AI レビューの失敗（API エラー・レート制限）で PR を block しない。
    required check にはせず、失敗は step summary に残すのみとする。
-5. **dogfooding を開始する**:
+5. ~~**dogfooding を開始する**~~（**実施しない**。冒頭の方向転換注記を参照）:
    - 自分の実 repo 1〜2 個に `aro init` → 生成物を commit → PR を開いてコメントが付くことを確認
    - `ANTHROPIC_API_KEY` を対象 repo の secrets に登録（この手順を README または docs に記載）
    - 数週間運用し、distribution を 1 回以上更新して `aro diff` → `aro sync` を通す
    - 気づき（プロンプトの精度・doctor の WARN の妥当性・conflict の発生頻度）を記録する
-6. **フィードバックを反映する**: `review.md` / `project.yaml.hbs` の初期値を運用結果で調整し、
+6. ~~**フィードバックを反映する**~~（**実施しない**。payload 検証は計画 03 のローカル改善ループへ）: `review.md` / `project.yaml.hbs` の初期値を運用結果で調整し、
    sync で行き渡ることを確認する（＝配布 → 消費 → 改善 → 再配布のループを 1 周させる）。
 
-## 受け入れ条件（DoD）
+## 受け入れ条件（DoD）（記録。方向転換により以後更新しない。実装で担保済みの項目のみ ✔ 相当）
 
 - [ ] 実 repo の PR に AI レビューコメントが自動で付く
 - [ ] コメント内容に `project.yaml` の設定（例: forbidden path への変更検知）が反映されている
