@@ -114,7 +114,13 @@ const results = [];
 function record(name, pass, detail) {
   results.push(pass);
   const status = pass ? "PASS" : "FAIL";
-  console.log(`${status}: ${name}${detail ? ` (${detail})` : ""}`);
+  const line = `${status}: ${name}${detail ? ` (${detail})` : ""}`;
+  // sync-managed-schema.mjs の流儀に合わせ、FAIL は console.error（stderr）、PASS は console.log（stdout）。
+  if (pass) {
+    console.log(line);
+  } else {
+    console.error(line);
+  }
 }
 
 function printHelp() {
@@ -167,37 +173,57 @@ async function main() {
   if (preTag) {
     console.log("--pre-tag: d/e（origin タグの検証。タグ発行後にのみ意味を持つ）はスキップしました。");
   } else {
-    const tags = readOriginTags();
     const releaseTag = `v${version}`;
-    const releaseSha = tags.get(releaseTag);
+    // origin へのアクセス（git ls-remote / workflow ファイル読み取り）はネットワーク不通・
+    // remote 未設定・認証失敗などで例外を投げうる。ここで捕捉せず main().catch まで素通りさせると
+    // d/e の PASS/FAIL 行が出力されないまま生の例外ダンプで落ちてしまう
+    // （sync-managed-schema.mjs の「失敗は FAIL: 行 + 対処案内で報告する」流儀と不一致になる）ため、
+    // このブロック全体を try/catch し、失敗時は d/e を明示的に FAIL として record する。
+    try {
+      const tags = readOriginTags();
+      const releaseSha = tags.get(releaseTag);
 
-    // d. タグ v<version> が origin に存在すること
-    record(
-      `d. タグ ${releaseTag} が origin に存在`,
-      Boolean(releaseSha),
-      releaseSha ? `sha=${releaseSha}` : "origin に見つかりません",
-    );
+      // d. タグ v<version> が origin に存在すること
+      record(
+        `d. タグ ${releaseTag} が origin に存在`,
+        Boolean(releaseSha),
+        releaseSha ? `sha=${releaseSha}` : "origin に見つかりません",
+      );
 
-    // e. origin の moving tag v<major> が origin の v<version> と同じ commit を指すこと。
-    //    <major> は配布中の workflow ファイルが実際に参照している compat line から読む
-    //    （リリース version の semver major とは別軸。RELEASE.md §0 / §1 参照）。
-    const [reviewTag, improveTag] = await Promise.all([
-      readReferencedMovingTag(REVIEW_WORKFLOW),
-      readReferencedMovingTag(IMPROVE_WORKFLOW),
-    ]);
-    if (!reviewTag || !improveTag || reviewTag !== improveTag) {
+      // e. origin の moving tag v<major> が origin の v<version> と同じ commit を指すこと。
+      //    <major> は配布中の workflow ファイルが実際に参照している compat line から読む
+      //    （リリース version の semver major とは別軸。RELEASE.md §0 / §1 参照）。
+      const [reviewTag, improveTag] = await Promise.all([
+        readReferencedMovingTag(REVIEW_WORKFLOW),
+        readReferencedMovingTag(IMPROVE_WORKFLOW),
+      ]);
+      if (!reviewTag || !improveTag || reviewTag !== improveTag) {
+        record(
+          "e. moving tag が release タグと同じ commit を指す",
+          false,
+          `ai-review.yml@${reviewTag ?? "(見つかりません)"} ai-improve.yml@${improveTag ?? "(見つかりません)"} が一致しません`,
+        );
+      } else {
+        const movingTag = reviewTag;
+        const movingSha = tags.get(movingTag);
+        record(
+          `e. moving tag ${movingTag} が ${releaseTag} と同じ commit を指す`,
+          Boolean(releaseSha) && Boolean(movingSha) && movingSha === releaseSha,
+          `${movingTag}=${movingSha ?? "(見つかりません)"} ${releaseTag}=${releaseSha ?? "(見つかりません)"}`,
+        );
+      }
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      const guidance = "ネットワーク接続や git remote 設定を確認してください。";
+      record(
+        `d. タグ ${releaseTag} が origin に存在`,
+        false,
+        `origin へのアクセスに失敗しました: ${message} — ${guidance}`,
+      );
       record(
         "e. moving tag が release タグと同じ commit を指す",
         false,
-        `ai-review.yml@${reviewTag ?? "(見つかりません)"} ai-improve.yml@${improveTag ?? "(見つかりません)"} が一致しません`,
-      );
-    } else {
-      const movingTag = reviewTag;
-      const movingSha = tags.get(movingTag);
-      record(
-        `e. moving tag ${movingTag} が ${releaseTag} と同じ commit を指す`,
-        Boolean(releaseSha) && Boolean(movingSha) && movingSha === releaseSha,
-        `${movingTag}=${movingSha ?? "(見つかりません)"} ${releaseTag}=${releaseSha ?? "(見つかりません)"}`,
+        `origin へのアクセスに失敗したため検証できません: ${message} — ${guidance}`,
       );
     }
   }
@@ -208,7 +234,11 @@ async function main() {
     process.exitCode = 1;
     return;
   }
-  console.log("\nすべての検証項目が PASS しました。");
+  if (preTag) {
+    console.log("\na〜c が PASS しました（d/e は --pre-tag によりスキップ）。");
+  } else {
+    console.log("\nすべての検証項目が PASS しました。");
+  }
 }
 
 main().catch((error) => {
