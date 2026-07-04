@@ -99,12 +99,12 @@ minor 変更は `schema_version` の値を変えないため、`aro doctor` の 
 
 現状の実装（事実）: `packages/aro-cli/src/core/doctor.ts` の `checkProjectYaml`（148-189 行目）は、
 `.ai/project.yaml` を parse した値を `validateJsonSchema(projectSchema, parsed)` で検証し、
-1 件でも違反があれば chek id `project-yaml.schema` を **FAIL** として報告する（179-185 行目）。
+1 件でも違反があれば check id `project-yaml.schema` を **FAIL** として報告する（179-185 行目）。
 `schema_version` が `1` 以外であれば `$.schema_version: must be 1` が違反の一つとして含まれ、
 他のフィールドがすべて有効でも `project-yaml.schema` チェック全体が FAIL になる。WARN に軽減する分岐は無い。
 
 方針: **schema_version 不一致は今後も FAIL のままとする。** 根拠は doctor.ts 冒頭のコメント（12-17 行目）
-にすでに書かれている重大度の定義そのものである。
+に書かれている重大度の定義である（以下は具体例部分を省略した抜粋。原文は doctor.ts 12-17 行目を参照）。
 
 ```txt
 FAIL: 必須アーティファクトの欠如・schema 違反・人間による managed file の直接編集など、
@@ -135,13 +135,15 @@ schema 違反は明示的に FAIL の定義に含まれる。加えて、`.ai/pr
 1. `schemas/project.schema.json` に対して、上記の「major（breaking）」に該当する変更が実際に必要になった
    ——つまり `schema_version` の `const` 値を初めて `1` から動かす具体的な理由が生まれたとき。
    MVP 開始以来 `schema_version` は `1` のまま変わったことがなく、移行すべき対象がまだ存在しない。
+   > この条件が満たされて `schema_version` を実際に bump すると、`aro doctor` の `project-yaml.schema`
+   > FAIL が複数 repo で同時に発生する（前節のとおり FAIL のまま維持する方針のため）。これは
+   > 独立した着手条件ではなく、条件 1 が満たされたことが fleet 診断（計画 05）や CI ゲート（計画 03）
+   > を通じて運用上の障害として可視化される、という条件 1 のエスカレーション経路である。
 2. `aro init` 済みの参加 repo が複数存在し（計画 05 の目安と同じく「3 個を超えたら」）、
    `.ai/project.yaml` を repo ごとに手で編集する運用コストが無視できなくなったとき。
-3. 実際に (1) が起きた結果として `aro doctor` の `project-yaml.schema` FAIL が複数 repo で
-   同時に発生し、fleet 診断（計画 05）や CI ゲート（計画 03）で運用上の障害として顕在化したとき。
 
-いずれも「起きたら着手する」条件であり、先回りして `aro upgrade` の CLI 設計・移行コードを今書くことは
-本文書のスコープ外とする。
+いずれか一方が満たされれば着手を検討する（OR 条件）。先回りして `aro upgrade` の CLI 設計・移行コードを
+今書くことは本文書のスコープ外とする。
 
 ## `.ai/project.yaml` の `create_only` 戦略との関係
 
@@ -185,19 +187,12 @@ seed_files:
   「`aro doctor` の FAIL を見て、対象 repo の `.ai/project.yaml` を人間が手で新しい構造に書き換える」
   以外に存在しない。
 
-## まとめ
+## `schemas/project.schema.json` を変更する人が最初に守ること
 
-- `schema_version`（`.ai/project.yaml` 側）は project.yaml のフィールド構造の互換性を表す。
-  manifest.yaml 側・lock file 側の `schema_version` とは独立した別カウンタ。
-- minor（compatible）は `schema_version` を上げずに済む変更、major（breaking）は上げる変更。
-  現状は `const: 1` の 1 値のみ許容する実装であり、新旧共存の是非は major 変更が実際に必要になったときに決める。
-- `aro doctor` は schema 違反（`schema_version` 不一致含む）を FAIL として扱う。`.ai/project.yaml` は
-  `aro sync` で自動修復されない（`create_only`）ため、WARN に格下げする理由がない。
-- `aro upgrade` は、major 変更が実際に必要になり・参加 repo 数が増え・FAIL が運用上の問題として
-  顕在化してから着手する。
-- `.ai/project.yaml` が `create_only` である以上、distribution 側の schema がいくら進化しても
-  各 repo の実ファイルは凍結されたまま残る。この凍結問題を解消する手段が `aro upgrade` であり、
-  `aro sync` の仕組み（managed_overwrite）を流用できない設計上の理由がある。
+`schemas/project.schema.json` を編集する前に、既存の有効な `.ai/project.yaml` が変更後も無編集で valid
+であり続けるかを確認する。valid であり続けるなら `schema_version` を上げない（minor）。上げる（major）と
+判断した場合は、bump した瞬間に全 repo の `.ai/project.yaml` が `aro doctor` で FAIL することを踏まえ、
+本文書の着手条件を満たすまで `aro upgrade` の実装なしに bump しない。
 
 ## 関連ドキュメント
 
