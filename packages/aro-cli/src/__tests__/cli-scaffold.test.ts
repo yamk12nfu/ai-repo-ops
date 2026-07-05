@@ -21,7 +21,7 @@ describe("aro CLI scaffold", () => {
 
   it("CLIバージョンを公開している", () => {
     expect(buildProgram().version()).toBe(ARO_CLI_VERSION);
-    expect(ARO_CLI_VERSION).toBe("0.1.0");
+    expect(ARO_CLI_VERSION).toBe("0.1.1");
   });
 
   it("diff は --detailed-exitcode オプションを持つ", () => {

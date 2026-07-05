@@ -182,8 +182,9 @@ function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolat
  *   1. forbidden_paths（project.yaml の `ai.forbidden_paths` ∪ policy の `forbidden_paths`）
  *   2. managed files（`.ai/managed/**` と lock file）
  *   3. workflows（`.github/workflows/**`。設定に依らない既定の forbidden）
- *   4. project_config（`.ai/project.yaml` 自体の変更。設定に依らない既定の built-in。禁止ではなく
- *      人間レビューを促す通知として報告する）
+ *   4. project_config（`.ai/project.yaml` 自体の変更。設定に依らない既定の built-in。正当な変更も
+ *      ありうるが、検証ルールを定めるファイルのため他の違反と同じく exit 1 に倒し、人間が内容を確認して
+ *      明示的に override する運用を要求する。docs/guard.md「project_config の扱い」参照）
  *   5. allowed_paths（project.yaml の `ai.allowed_paths` が定義されている場合のみ。未定義なら制限なし）
  *   6. change_limits（変更ファイル数の実効上限は project.yaml 優先・追加行数合計は policy のみ）
  *

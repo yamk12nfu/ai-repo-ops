@@ -7,7 +7,7 @@ import { registerDoctor } from "./commands/doctor.js";
 import { registerGuard } from "./commands/guard.js";
 
 /** aro CLI のバージョン。manifest.version とは独立した CLI 自身のバージョン。 */
-export const ARO_CLI_VERSION = "0.1.0";
+export const ARO_CLI_VERSION = "0.1.1";
 
 /**
  * aro のコマンドツリーを構築する。
