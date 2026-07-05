@@ -117,3 +117,33 @@ export class RepoError extends AroError {
     super(code, message, options);
   }
 }
+
+/**
+ * `aro guard` が読む project.yaml（guard に必要な最小 schema）の読み込み・検証に失敗したときのエラー。
+ * project.yaml 不在・YAML parse 失敗・zod 検証失敗に対応する（計画 03 Stage 1-1）。
+ */
+export class ProjectConfigError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}
+
+/**
+ * `aro guard` が読む policy（`.ai/managed/policies/*.yaml`）の読み込み・検証に失敗したときのエラー。
+ * policy ファイル不在・YAML parse 失敗・zod 検証失敗に対応する（計画 03 Stage 1-1）。
+ */
+export class PolicyError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}
+
+/**
+ * `git diff --numstat` の実行・出力解釈に失敗したときのエラー（計画 03 Stage 1-1）。
+ * base ref が repo に存在しない等の git の異常終了、および numstat 出力の parse 失敗に対応する。
+ */
+export class GitDiffError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}
