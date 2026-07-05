@@ -8,8 +8,9 @@
 > API キー未登録なら明示 skip + workflow 成功のため、配布済み repo に害はない。
 > **すでに `ANTHROPIC_API_KEY` を登録した repo がある場合は、課金防止のため secret の削除
 > （`gh secret delete ANTHROPIC_API_KEY --repo <owner>/<repo>`）または workflow の無効化を検討する。**
-> 今後この workflow のエンジンは `aro guard`（AI 不要の機械検証）へ差し替える
-> （[計画 03](./plans/03-guard-and-improve-loop.md) Stage 1-2）。以下は v0.1.1 時点の実装の記録として残す。
+> この workflow のエンジンは `aro guard`（AI 不要の機械検証）へ**差し替え済み**
+> （[計画 03](./plans/03-guard-and-improve-loop.md) Stage 1-2、[`guard.md`](./guard.md) 参照）。
+> 以下は v0.1.1 時点の実装の記録として残す。
 
 `ai-repo-ops` に参加している repo で PR を開くと、AI が diff をレビューして PR コメントを自動投稿する（v0.1.1 時点の実装。上記のとおり有効化はしない）。このドキュメントは仕組み・有効化手順・挙動・セキュリティ設計をまとめる。実装は `.github/workflows/ai-review.reusable.yml`（中央 reusable workflow）と `distribution/base/files/.github/workflows/ai-review.yml`（配布側の入口）にある。
 

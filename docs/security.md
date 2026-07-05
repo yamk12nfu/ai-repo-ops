@@ -77,7 +77,7 @@ permissions:
 
 > **方向転換（2026-07-05）**: `ai-improve` の `contents: write` は「CI 内で AI が改善 PR を自動作成する」旧設計の名残である。現行の reusable workflow は stub（echo のみ）で実書き込みは行わないが、現方針では CI 内で AI を実行しない（改善ループは開発者のローカル環境で回す。[計画 03](./plans/03-guard-and-improve-loop.md) 参照）ため、この権限は不要になる。計画 03 Stage 2-2 で配布物からの除去・権限の縮小・`aro doctor` の WARN 判定の見直しをセットで行う。
 
-`id-token: write` は `ai-review` の AI レビューエンジン（`claude-code-action`）の既定認証（OIDC 経由の短命トークン発行）に必要なため付与している。`contents: write` を与えない方針には影響せず、`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
+`id-token: write` は旧エンジン（`claude-code-action`）の既定認証（OIDC）向けに配布側 `ai-review.yml` に付与していたもの。guard エンジンへの差し替え（計画 03 Stage 1-2）後の reusable workflow は要求しない（callee が要求しない permission は caller にあっても使われないため、配布済み repo に残っていても無害）。`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
 
 `aro doctor` は次も検査する。
 
