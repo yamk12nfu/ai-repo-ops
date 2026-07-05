@@ -34,6 +34,12 @@ import { GitDiffError } from "./errors.js";
 const execFileAsync = promisify(execFile);
 
 /**
+ * git 出力の受け取りバッファ上限。execFile の既定は 1MB で、数万ファイル規模の diff（numstat）や
+ * 大きめのファイルの `git show` で ERR_CHILD_PROCESS_STDIO_MAXBUFFER になるため、余裕を持たせる。
+ */
+const GIT_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
+
+/**
  * `git diff --numstat` 1 行分の変更。
  * バイナリファイルは numstat 上 `-` で表示されるため、addedLines / deletedLines ともに null にする。
  */
@@ -100,7 +106,7 @@ export async function getChangedFiles(repoRoot: string, base: string): Promise<G
     const result = await execFileAsync(
       "git",
       ["-C", repoRoot, "diff", "--numstat", "-z", "--no-renames", `${base}...HEAD`],
-      { encoding: "utf8" },
+      { encoding: "utf8", maxBuffer: GIT_MAX_BUFFER_BYTES },
     );
     stdout = result.stdout;
   } catch (error) {
@@ -133,6 +139,7 @@ export async function getMergeBase(repoRoot: string, baseRef: string): Promise<s
   try {
     const result = await execFileAsync("git", ["-C", repoRoot, "merge-base", baseRef, "HEAD"], {
       encoding: "utf8",
+      maxBuffer: GIT_MAX_BUFFER_BYTES,
     });
     return result.stdout.trim();
   } catch (error) {
@@ -184,6 +191,7 @@ export async function readFileAtRevision(
   try {
     const result = await execFileAsync("git", ["-C", repoRoot, "show", `${revision}:${filePath}`], {
       encoding: "utf8",
+      maxBuffer: GIT_MAX_BUFFER_BYTES,
     });
     return result.stdout;
   } catch (error) {
