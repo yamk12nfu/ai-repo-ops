@@ -23,10 +23,20 @@ CI への書き込み権限の追加は一切不要。
 - ローカルに AI 実行環境（Claude Code 等）と `gh` CLI があること。
 - `aro` CLI が実行できること（MVP では中央 repo 内の `pnpm aro ...` または `pnpm link --global`。
   [README](../README.md) の「使い方」参照）。
+- **clean worktree で開始すること**（または専用 branch / worktree で行うこと）。開発者の
+  未コミット変更が残った状態で始めると、改善の失敗時に AI がループ由来でない変更まで
+  巻き込んで破棄する事故につながる（improve.md はループ由来のファイル以外の破棄を禁じているが、
+  運用側でも入口で守る）。
 
 ## 手順（1 周分）
 
-1. **起動**: 対象 repo で Claude Code を起動し、配布済みプロンプトを読み込ませる。
+1. **起動**: 対象 repo で作業状態を確認し、専用 branch を切ってから Claude Code を起動し、
+   配布済みプロンプトを読み込ませる。
+
+   ```bash
+   git status --short                        # 空であること（未コミット変更を持ち込まない）
+   git switch -c chore/ai-improve-<topic>    # 専用 branch で作業する
+   ```
 
    ```txt
    .ai/managed/prompts/improve.md を読んで、その手順に従って改善を 1 つ実施して
@@ -38,9 +48,13 @@ CI への書き込み権限の追加は一切不要。
 3. **自己検証**: AI（または開発者）がローカルで次の両方を通す。
 
    ```bash
-   aro guard --repo . --base <default branch>   # policies 違反の機械検証（exit 0 であること。例: --base main）
+   git fetch origin <default branch>
+   aro guard --repo . --base origin/<default branch>   # 例: --base origin/main（exit 0 であること）
    # + quality_gates.required に対応する commands.*（lint / test 等）
    ```
+
+   fetch 済みの `origin/<default branch>` を使うと、ローカルの default branch が古くても
+   CI に近い merge-base で検証できる（[guard.md](./guard.md) の CI での利用と同じ発想）。
 
    guard 違反・gates 失敗を解消できない場合、その改善は破棄する（improve.md がそう指示している）。
 

@@ -30,13 +30,22 @@
 
 ## 進め方
 
+0. **開始前の安全確認**: `git status --short` を実行し、clean worktree であること（または専用
+   branch / worktree で作業していること）を確認する。**既存の未コミット変更がある場合は、
+   開発者に確認するまで一切の変更・破棄を行わない。** 作業は専用 branch
+   （例: `git switch -c chore/ai-improve-<topic>`）で行う。
 1. 小さく安全な改善を 1 つ選ぶ（lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
 2. 変更を実施する。
 3. **自己検証を行う（両方とも通ること）**:
-   - `aro guard --repo . --base <default branch>` — policies 違反の機械検証（exit 0 であること）
+   - `git fetch origin <default branch>` してから
+     `aro guard --repo . --base origin/<default branch>` — policies 違反の機械検証
+     （exit 0 であること。fetch 済みの `origin/<default branch>` を使うと、ローカルの
+     default branch が古くても CI に近い merge-base で検証できる）
    - `quality_gates.required` に対応する `commands.*` のコマンド — すべて緑であること
 4. guard 違反・gates 失敗を解消できない、または `max_changed_files` を超える場合は
-   **変更を破棄し、提案だけを開発者に残す**（無理に通そうとしない）。
+   変更を破棄し、提案だけを開発者に残す（無理に通そうとしない）。
+   **破棄してよいのは、この改善ループで自分が作成・変更したファイルだけ。破棄前に
+   対象ファイルの一覧を開発者へ提示して確認を得る。**
 5. 自己検証が通ったら、改善内容を開発者に提示する。**PR の作成は開発者の確認を得てから**
    行う（タイトル規約: `chore(ai-improve): <改善の要約>`）。`require_human_review` が
    true の間は自動 merge しない（merge は常に人間が判断する）。
