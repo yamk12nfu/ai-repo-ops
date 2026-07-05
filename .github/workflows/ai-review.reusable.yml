@@ -83,9 +83,10 @@ jobs:
         with:
           repository: yamk12nfu/ai-repo-ops
           # この reusable workflow 自身と同じ commit の CLI を使う（workflow と
-          # エンジンのバージョン一致を保証）。job_workflow_sha が得られない環境では
-          # v1（この workflow が配布される互換ライン）へフォールバック。
-          ref: ${{ github.job_workflow_sha || 'v1' }}
+          # エンジンのバージョン一致を保証）。job.workflow_sha は「このジョブを定義する
+          # workflow ファイル（= この reusable workflow）の commit SHA」。取得できない
+          # 環境（GHES 等）では v1（この workflow が配布される互換ライン）へフォールバック。
+          ref: ${{ job.workflow_sha || 'v1' }}
           path: .aro-engine
           persist-credentials: false
 
@@ -127,6 +128,15 @@ jobs:
             cat guard-error.json >&2
             exit 3
           fi
+          if [ "$code" -eq 1 ]; then
+            # 違反テーブルを一度だけ生成し、summary / PR コメントの両方で使う。
+            # path / message は PR 作者が制御できる入力（ファイル名等）を含むため、
+            # Markdown テーブルを壊す文字（|・改行）をエスケープする。
+            jq -r '
+              def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
+              .report.violations[] | "| \(.kind|esc) | \((.path // "-")|esc) | \(.message|esc) |"
+            ' guard-result.json > guard-violations.md
+          fi
           # exit 0（違反なし）/ 1（違反あり）はここでは失敗にせず、summary 出力後に判定する
           exit 0
 
@@ -157,7 +167,7 @@ jobs:
               echo ""
               echo "| kind | path | 内容 |"
               echo "|---|---|---|"
-              jq -r '.report.violations[] | "| \(.kind) | \(.path // "-") | \(.message) |"' guard-result.json
+              cat guard-violations.md
             else
               echo "- 状態: **error**（guard exit: ${GUARD_EXIT:-unknown}）— job log を参照"
             fi
@@ -178,7 +188,7 @@ jobs:
             echo ""
             echo "| kind | path | 内容 |"
             echo "|---|---|---|"
-            jq -r '.report.violations[] | "| \(.kind) | \(.path // "-") | \(.message) |"' guard-result.json
+            cat guard-violations.md
             echo ""
             echo "検証ルールは base 側の \`.ai/project.yaml\` と適用 policy から読まれます（PR 内の変更では緩められません）。詳細: docs/guard.md"
           } > guard-comment.md
