@@ -90,11 +90,19 @@ central reusable workflow（yamk12nfu/ai-repo-ops/.github/workflows/<file>）を
 
 ## secret / token
 
-`ai-review` の reusable workflow（`ai-review.reusable.yml`）は `workflow_call.secrets.anthropic_api_key` を明示的に受け取る（`required: false`。未設定なら実行時 gate で明示 skip）。配布側 `ai-review.yml` も `secrets: { anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} }` のように明示的に渡しており、`secrets: inherit` は使わない方針を維持している（`ai-repo-ops-implementation-plan-v3.md` §20.5）。
+現エンジン（`aro guard`。計画 03 Stage 1-2 で差し替え）は **secrets を一切参照しない**。
 
-fork PR には GitHub の仕様上 secrets が渡らないため、AI レビューは明示的に skip される（workflow 自体は成功する）。詳細は [`ai-review.md`](./ai-review.md) を参照。
-
-> **方向転換（2026-07-05）**: 現方針では対象 repo に `ANTHROPIC_API_KEY` を登録する運用は行わない（CI 内で AI を実行しないため。[計画 02 の注記](./plans/02-ai-review-commenter.md) 参照）。secrets の受け取り口（`anthropic_api_key`）は reusable workflow の互換性契約として残るが、計画 03 Stage 1-2 の guard エンジンへの差し替え以降は使用されない。
+- `workflow_call.secrets.anthropic_api_key` は v0.1.1 の旧エンジン（AI レビュー）との互換性契約として
+  **受け取り口だけ残っている**（`required: false`）。guard エンジンは未設定でもそのまま実行する。
+- 配布側 `ai-review.yml` は `secrets: { anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} }` のように
+  明示的に渡す形を維持している（`secrets: inherit` は使わない方針。
+  `ai-repo-ops-implementation-plan-v3.md` §20.5）。値が空でも guard の動作には影響しない。
+- **fork PR でも guard は実行される**（secrets 不要のため）。ただし fork PR では `GITHUB_TOKEN` が
+  read-only になるため、違反時の PR コメント投稿だけ失敗しうる（`continue-on-error` で無視し、
+  判定自体は job の成否で伝わる）。
+- 現方針では対象 repo に `ANTHROPIC_API_KEY` を登録する運用は行わない（CI 内で AI を実行しないため。
+  [計画 02 の注記](./plans/02-ai-review-commenter.md) 参照）。旧エンジン時代の挙動の記録は
+  [`ai-review.md`](./ai-review.md) を参照。
 
 ## managed file 誤編集からの復旧
 

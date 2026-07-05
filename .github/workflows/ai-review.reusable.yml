@@ -59,11 +59,10 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate config presence
-        env:
-          CONFIG_PATH: ${{ inputs.config_path }}
-        run: |
-          test -f "$CONFIG_PATH"
+      # 註: 旧エンジン時代にあった「HEAD 側の config 存在チェック（test -f）」は置かない。
+      # guard は検証ルールを merge-base 側から読むため、HEAD の config 有無は判定材料に
+      # ならない（PR が .ai/project.yaml を削除したケースも guard 自身が project_config
+      # violation として報告する — precheck で落とすと違反一覧が出ずに終わってしまう）。
 
       - name: Gate — pull_request イベント以外は skip
         id: gate
@@ -81,11 +80,12 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
-          repository: yamk12nfu/ai-repo-ops
-          # この reusable workflow 自身と同じ commit の CLI を使う（workflow と
-          # エンジンのバージョン一致を保証）。job.workflow_sha は「このジョブを定義する
-          # workflow ファイル（= この reusable workflow）の commit SHA」。取得できない
-          # 環境（GHES 等）では v1（この workflow が配布される互換ライン）へフォールバック。
+          # この reusable workflow 自身と同じ repo・同じ commit の CLI を使う（workflow と
+          # エンジンのバージョン一致を保証）。job.workflow_repository / job.workflow_sha は
+          # 「このジョブを定義する workflow ファイル」の repo と commit SHA（公式 docs が
+          # reusable workflow の自己 checkout に示す組み合わせ）。取得できない環境（GHES 等）
+          # では中央 repo の v1（この workflow が配布される互換ライン）へフォールバック。
+          repository: ${{ job.workflow_repository || 'yamk12nfu/ai-repo-ops' }}
           ref: ${{ job.workflow_sha || 'v1' }}
           path: .aro-engine
           persist-credentials: false
@@ -127,6 +127,12 @@ jobs:
             fi
             cat guard-error.json >&2
             exit 3
+          fi
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            # 仕様外の exit code（node の signal 死・CLI 起動失敗・将来の exit 2 等）は
+            # 見逃さず即失敗に倒す（required check が誤って green になるのを防ぐ）
+            cat guard-error.json >&2 || true
+            exit "$code"
           fi
           if [ "$code" -eq 1 ]; then
             # 違反テーブルを一度だけ生成し、summary / PR コメントの両方で使う。
