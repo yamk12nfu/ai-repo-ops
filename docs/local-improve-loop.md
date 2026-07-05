@@ -38,7 +38,7 @@ CI への書き込み権限の追加は一切不要。
 3. **自己検証**: AI（または開発者）がローカルで次の両方を通す。
 
    ```bash
-   aro guard --repo . --base main   # policies 違反の機械検証（exit 0 であること）
+   aro guard --repo . --base <default branch>   # policies 違反の機械検証（exit 0 であること。例: --base main）
    # + quality_gates.required に対応する commands.*（lint / test 等）
    ```
 
