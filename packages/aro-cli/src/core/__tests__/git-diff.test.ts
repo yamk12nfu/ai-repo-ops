@@ -4,12 +4,13 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GitDiffError } from "../errors.js";
-import { getChangedFiles } from "../git-diff.js";
+import { getChangedFiles, getMergeBase, readFileAtRevision } from "../git-diff.js";
 import { makeTempDir, writeRaw } from "../../test-support/distribution.fixture.js";
 import {
   gitCheckout,
   gitCheckoutNewBranch,
   gitCommitAll,
+  gitRevParse,
   initRealGitRepo,
 } from "../../test-support/git.fixture.js";
 
@@ -112,6 +113,103 @@ describe("getChangedFiles: エラー", () => {
     await expect(getChangedFiles(repoRoot, "does-not-exist-ref")).rejects.toBeInstanceOf(GitDiffError);
     await expect(getChangedFiles(repoRoot, "does-not-exist-ref")).rejects.toMatchObject({
       code: "GIT_DIFF_FAILED",
+    });
+  });
+});
+
+describe("getMergeBase", () => {
+  it("base と HEAD の共通の祖先 commit SHA を返す", async () => {
+    await writeRaw(repoRoot, "base.txt", "v1\n");
+    await gitCommitAll(repoRoot, "init");
+    // このコミット SHA が merge-base になるはず。
+    const headSha = await gitRevParse(repoRoot, "HEAD");
+
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, "feature.txt", "feature change\n");
+    await gitCommitAll(repoRoot, "feat: add feature file");
+
+    const mergeBase = await getMergeBase(repoRoot, "main");
+    expect(mergeBase).toBe(headSha);
+  });
+
+  it("base 側が HEAD 後に進んでいても、分岐した時点の commit を返す（PR からは書き換えられない基準点）", async () => {
+    await writeRaw(repoRoot, "base.txt", "v1\n");
+    await gitCommitAll(repoRoot, "init");
+    const branchPointSha = await gitRevParse(repoRoot, "HEAD");
+
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, "feature.txt", "feature change\n");
+    await gitCommitAll(repoRoot, "feat: add feature file");
+
+    await gitCheckout(repoRoot, "main");
+    await writeRaw(repoRoot, "base.txt", "v2 (main progressed)\n");
+    await gitCommitAll(repoRoot, "chore: progress main after branch");
+
+    await gitCheckout(repoRoot, "feature");
+    const mergeBase = await getMergeBase(repoRoot, "main");
+    expect(mergeBase).toBe(branchPointSha);
+  });
+
+  it("base ref が解決できなければ GitDiffError（code: GIT_MERGE_BASE_FAILED）", async () => {
+    await writeRaw(repoRoot, "a.txt", "line1\n");
+    await gitCommitAll(repoRoot, "init");
+
+    await expect(getMergeBase(repoRoot, "does-not-exist-ref")).rejects.toMatchObject({
+      code: "GIT_MERGE_BASE_FAILED",
+    });
+  });
+});
+
+describe("readFileAtRevision", () => {
+  it("指定 revision でのファイル内容を返す", async () => {
+    await writeRaw(repoRoot, ".ai/project.yaml", "project:\n  risk_level: medium\n");
+    await gitCommitAll(repoRoot, "chore: add project.yaml");
+    const mergeBase = await getMergeBase(repoRoot, "main");
+
+    const text = await readFileAtRevision(repoRoot, mergeBase, ".ai/project.yaml");
+    expect(text).toBe("project:\n  risk_level: medium\n");
+  });
+
+  it("PR HEAD で変更されても、指定した revision（merge-base）時点の内容を返す（自己改変耐性の土台）", async () => {
+    await writeRaw(repoRoot, ".ai/project.yaml", "project:\n  risk_level: medium\n");
+    await gitCommitAll(repoRoot, "chore: strict base config");
+    const mergeBase = await getMergeBase(repoRoot, "main");
+
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, ".ai/project.yaml", "project:\n  risk_level: low\n");
+    await gitCommitAll(repoRoot, "chore: self-modify project.yaml (attack)");
+
+    // HEAD（feature の working tree 相当）では書き換わっているが、merge-base 時点の内容は不変。
+    const atMergeBase = await readFileAtRevision(repoRoot, mergeBase, ".ai/project.yaml");
+    expect(atMergeBase).toBe("project:\n  risk_level: medium\n");
+    const atHead = await readFileAtRevision(repoRoot, "HEAD", ".ai/project.yaml");
+    expect(atHead).toBe("project:\n  risk_level: low\n");
+  });
+
+  it("revision にファイルが存在しなければ null", async () => {
+    await writeRaw(repoRoot, "a.txt", "line1\n");
+    await gitCommitAll(repoRoot, "init");
+
+    const text = await readFileAtRevision(repoRoot, "HEAD", ".ai/project.yaml");
+    expect(text).toBeNull();
+  });
+
+  it("working tree にだけ存在し commit されていないファイルは revision に存在しないので null", async () => {
+    await writeRaw(repoRoot, "a.txt", "line1\n");
+    await gitCommitAll(repoRoot, "init");
+    // commit しない（working tree にだけ存在させる）。
+    await writeRaw(repoRoot, "uncommitted.txt", "not committed\n");
+
+    const text = await readFileAtRevision(repoRoot, "HEAD", "uncommitted.txt");
+    expect(text).toBeNull();
+  });
+
+  it("revision 自体が解決できなければ GitDiffError（code: GIT_SHOW_FAILED）", async () => {
+    await writeRaw(repoRoot, "a.txt", "line1\n");
+    await gitCommitAll(repoRoot, "init");
+
+    await expect(readFileAtRevision(repoRoot, "does-not-exist-rev", "a.txt")).rejects.toMatchObject({
+      code: "GIT_SHOW_FAILED",
     });
   });
 });

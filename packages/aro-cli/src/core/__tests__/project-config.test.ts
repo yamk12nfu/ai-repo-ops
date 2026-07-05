@@ -1,20 +1,7 @@
-import { rm } from "node:fs/promises";
-
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { ProjectConfigError } from "../errors.js";
-import { loadProjectConfig, parseProjectConfig, parseProjectConfigValue } from "../project-config.js";
-import { makeTempDir, writeRaw } from "../../test-support/distribution.fixture.js";
-
-let repoRoot: string;
-
-beforeEach(async () => {
-  repoRoot = await makeTempDir("aro-project-config-");
-});
-
-afterEach(async () => {
-  await rm(repoRoot, { recursive: true, force: true });
-});
+import { parseProjectConfig, parseProjectConfigValue } from "../project-config.js";
 
 describe("parseProjectConfigValue", () => {
   it("project.risk_level が enum 内なら成功し、ai 未設定でも通る", () => {
@@ -89,34 +76,14 @@ ai:
     expect(config.ai?.max_changed_files).toBe(10);
     expect(config.ai?.allowed_paths).toEqual(["src/**", "tests/**", "docs/**"]);
   });
-});
 
-describe("loadProjectConfig", () => {
-  it("project.yaml が無ければ PROJECT_CONFIG_NOT_FOUND", async () => {
-    await expect(loadProjectConfig(repoRoot)).rejects.toMatchObject({ code: "PROJECT_CONFIG_NOT_FOUND" });
-  });
-
-  it("project.yaml を読み込み検証する", async () => {
-    await writeRaw(
-      repoRoot,
-      ".ai/project.yaml",
-      `schema_version: 1
-project:
-  name: demo
-  risk_level: low
-`,
-    );
-    const config = await loadProjectConfig(repoRoot);
-    expect(config.project.risk_level).toBe("low");
-  });
-
-  it("schema 不一致（risk_level が enum 外）なら PROJECT_CONFIG_INVALID", async () => {
-    await writeRaw(repoRoot, ".ai/project.yaml", "project:\n  risk_level: extreme\n");
-    await expect(loadProjectConfig(repoRoot)).rejects.toMatchObject({ code: "PROJECT_CONFIG_INVALID" });
-  });
-
-  it("壊れた YAML なら PROJECT_CONFIG_PARSE", async () => {
-    await writeRaw(repoRoot, ".ai/project.yaml", "project: [unterminated\n");
-    await expect(loadProjectConfig(repoRoot)).rejects.toMatchObject({ code: "PROJECT_CONFIG_PARSE" });
+  it("schema 不一致（risk_level が enum 外）なら PROJECT_CONFIG_INVALID", () => {
+    try {
+      parseProjectConfig("project:\n  risk_level: extreme\n");
+      expect.unreachable("should have thrown");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProjectConfigError);
+      expect((error as ProjectConfigError).code).toBe("PROJECT_CONFIG_INVALID");
+    }
   });
 });

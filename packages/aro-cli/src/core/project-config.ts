@@ -1,5 +1,5 @@
 /**
- * `aro guard` が読む project.yaml（`.ai/project.yaml`）の zod schema と parse/load。
+ * `aro guard` が読む project.yaml（`.ai/project.yaml`）の zod schema と parse。
  *
  * docs/plans/03-guard-and-improve-loop.md Stage 1-1 に対応する（未 merge の場合はこのモジュールと
  * 呼び出し元 commands/guard.ts の実装を仕様の正とする）。
@@ -10,12 +10,20 @@
  * 実際に使うフィールド（`project.risk_level` と `ai.*`）だけを zod で厳密に検証し、他のフィールドは
  * `.passthrough()` でそのまま通す。authoritative schema 側で `project.risk_level` は必須（enum）なので、
  * ここでも必須にして整合を取る。
+ *
+ * `ai` セクション（`allowed_paths` / `forbidden_paths` / `max_changed_files`）を optional にできるのは、
+ * commands/guard.ts がこの値を PR HEAD（working tree）からではなく merge-base（PR からは書き換えられない
+ * revision）から読む前提だから。PR 自身が改変できる内容であれば、この schema を緩めても guard の
+ * 自己検証を骨抜きにできてしまう（詳細は commands/guard.ts と core/git-diff.ts の
+ * {@link import("./git-diff.js").readFileAtRevision} を参照）。working tree を読み込む
+ * loader（旧 `loadProjectConfig`）は自己改変・迂回を許してしまうため削除した。
+ *
+ * このモジュール自身は revision を意識しない（テキスト → 検証済み値、の純粋変換のみ）。
+ * どの revision から読むかは呼び出し側（commands/guard.ts）の責務。
  */
 import { z } from "zod";
 
 import { ProjectConfigError } from "./errors.js";
-import { readFileWithinRoot } from "./filesystem.js";
-import { PROJECT_YAML_PATH } from "./manifest.js";
 import { parseYaml } from "./yaml.js";
 
 /** project.yaml の `project.risk_level`（AI ハーネスの慎重さ・guard の policy 選択に使う）。 */
@@ -100,26 +108,4 @@ export function parseProjectConfig(text: string, sourceRef?: string): ProjectCon
     });
   }
   return parseProjectConfigValue(parsed, sourceRef);
-}
-
-/**
- * 対象 repo の project.yaml（`.ai/project.yaml`）を読み込み、guard 用最小 schema で検証する。
- *
- * doctor と異なり存在しない場合も null を返さず {@link ProjectConfigError} を投げる。guard は
- * 「検証に必要な入力が読めない」ことを unexpected（exit 3）として扱う設計のため（doctor は
- * 診断項目の 1 つとして FAIL 扱いするが、guard には「診断」の概念がない）。
- *
- * @param repoRoot 対象 repo の root（絶対 path 推奨）。
- * @throws {ProjectConfigError} project.yaml が存在しない/parse 不能/schema 不一致の場合。
- */
-export async function loadProjectConfig(repoRoot: string): Promise<ProjectConfig> {
-  const buffer = await readFileWithinRoot(repoRoot, PROJECT_YAML_PATH, "project.yaml");
-  if (buffer === null) {
-    throw new ProjectConfigError(
-      "PROJECT_CONFIG_NOT_FOUND",
-      `${PROJECT_YAML_PATH} が見つかりません: ${repoRoot}`,
-      { hint: "`aro init --repo .` を実行してください。" },
-    );
-  }
-  return parseProjectConfig(buffer.toString("utf8"), PROJECT_YAML_PATH);
 }

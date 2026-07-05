@@ -1,5 +1,5 @@
 /**
- * `aro guard` が読む policy（`.ai/managed/policies/*.yaml`）の zod schema・risk_level → path 解決・load。
+ * `aro guard` が読む policy（`.ai/managed/policies/*.yaml`）の zod schema・risk_level → path 解決・parse。
  *
  * docs/plans/03-guard-and-improve-loop.md Stage 1-1 に対応する（未 merge の場合はこのモジュールと
  * 呼び出し元 commands/guard.ts の実装を仕様の正とする）。
@@ -7,16 +7,21 @@
  * policy ファイルは managed file として配布される（distribution/base/files/.ai/managed/policies/*.yaml、
  * manifest 上は managed_overwrite）ため、対象 repo 側では `.ai/managed/policies/<name>.yaml` を直接
  * 読む。project.yaml の `project.risk_level` → policy ファイル名の対応規則は、これまで shell（計画書の
- * 記述）にしかなかったものを、guard 実装にあわせてここで初めて TypeScript の正として実装する。
+ * 記述）にしかなかったものを、guard 実装にあわせてここで初めて TypeScript の正として実装する
+ * （{@link policyPathForRiskLevel}）。
  *
  * project-config.ts と同様、guard が使うフィールド（`change_limits.*` / `forbidden_paths`）だけを
  * zod で検証し、他のフィールド（schema_version / name / review / allowed_actions / quality_gates 等）は
  * `.passthrough()` でそのまま通す。
+ *
+ * working tree（PR HEAD）から読み込む loader（旧 `loadPolicy`）は project-config.ts と同じ理由
+ * （PR 自身が policy を書き換えて自己検証を骨抜きにできてしまう）で削除した。commands/guard.ts は
+ * {@link policyPathForRiskLevel} で決めた path を merge-base から
+ * {@link import("./git-diff.js").readFileAtRevision} で読み、{@link parsePolicy} に渡す。
  */
 import { z } from "zod";
 
 import { PolicyError } from "./errors.js";
-import { readFileWithinRoot } from "./filesystem.js";
 import type { RiskLevel } from "./project-config.js";
 import { parseYaml } from "./yaml.js";
 
@@ -100,24 +105,4 @@ export function parsePolicy(text: string, sourceRef?: string): Policy {
     });
   }
   return parsePolicyValue(parsed, sourceRef);
-}
-
-/**
- * 対象 repo の risk_level に対応する policy ファイルを読み込み、guard 用最小 schema で検証する。
- *
- * @param repoRoot   対象 repo の root（絶対 path 推奨）。
- * @param riskLevel  project.yaml の `project.risk_level`。
- * @throws {PolicyError} policy ファイルが存在しない/parse 不能/schema 不一致の場合。
- */
-export async function loadPolicy(repoRoot: string, riskLevel: RiskLevel): Promise<Policy> {
-  const relPath = policyPathForRiskLevel(riskLevel);
-  const buffer = await readFileWithinRoot(repoRoot, relPath, "policy");
-  if (buffer === null) {
-    throw new PolicyError(
-      "POLICY_NOT_FOUND",
-      `policy ファイルが見つかりません: ${relPath}（risk_level=${riskLevel}）`,
-      { hint: "`aro sync --repo .` を実行して managed policy を配布してください。" },
-    );
-  }
-  return parsePolicy(buffer.toString("utf8"), relPath);
 }

@@ -46,3 +46,8 @@ export async function gitCheckoutNewBranch(repoRoot: string, branch: string): Pr
 export async function gitCheckout(repoRoot: string, ref: string): Promise<void> {
   await git(repoRoot, ["checkout", ref]);
 }
+
+/** ref（branch 名・HEAD 等）を commit SHA へ解決する。テストで「期待する merge-base」を求めるのに使う。 */
+export async function gitRevParse(repoRoot: string, ref: string): Promise<string> {
+  return (await git(repoRoot, ["rev-parse", ref])).trim();
+}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { LOCKFILE_RELATIVE_PATH } from "../lockfile.js";
+import { PROJECT_YAML_PATH } from "../manifest.js";
 import { parsePolicyValue, type Policy } from "../policy.js";
 import { parseProjectConfigValue, type ProjectConfig, type RiskLevel } from "../project-config.js";
 import { runGuard, type GuardChangedFile } from "../guard.js";
@@ -123,6 +124,38 @@ describe("runGuard: workflows", () => {
     const kinds = report.violations.map((v) => v.kind).sort();
     expect(kinds).toEqual(["forbidden_path", "workflow"]);
     expect(report.summary.violationCount).toBe(2);
+  });
+});
+
+describe("runGuard: project_config（.ai/project.yaml 自体の変更）", () => {
+  it(".ai/project.yaml の変更は project_config 違反（設定に依らない既定の built-in）", () => {
+    const report = runGuard({
+      changedFiles: [file(PROJECT_YAML_PATH)],
+      projectConfig: projectConfig(),
+      policy: policy(),
+    });
+    expect(report.violations).toEqual([
+      expect.objectContaining({ kind: "project_config", path: PROJECT_YAML_PATH }),
+    ]);
+  });
+
+  it("project.yaml が allowed_paths に含まれず forbidden_paths にも一致する場合、project_config と他の kind が両方報告される", () => {
+    const report = runGuard({
+      changedFiles: [file(PROJECT_YAML_PATH)],
+      projectConfig: projectConfig({ allowedPaths: ["src/**"], forbiddenPaths: [PROJECT_YAML_PATH] }),
+      policy: policy(),
+    });
+    const kinds = report.violations.map((v) => v.kind).sort();
+    expect(kinds).toEqual(["forbidden_path", "outside_allowed_paths", "project_config"]);
+  });
+
+  it("project.yaml 以外の .ai/** の変更は project_config 違反にならない", () => {
+    const report = runGuard({
+      changedFiles: [file(".ai/local/notes.md")],
+      projectConfig: projectConfig(),
+      policy: policy(),
+    });
+    expect(report.violations.filter((v) => v.kind === "project_config")).toEqual([]);
   });
 });
 

@@ -16,6 +16,7 @@
 import picomatch from "picomatch";
 
 import { LOCKFILE_RELATIVE_PATH } from "./lockfile.js";
+import { PROJECT_YAML_PATH } from "./manifest.js";
 import type { Policy } from "./policy.js";
 import type { ProjectConfig } from "./project-config.js";
 
@@ -24,6 +25,7 @@ export type GuardViolationKind =
   | "forbidden_path"
   | "managed_file"
   | "workflow"
+  | "project_config"
   | "outside_allowed_paths"
   | "too_many_files"
   | "too_many_added_lines";
@@ -103,11 +105,21 @@ const MANAGED_FILE_PATTERNS = [".ai/managed/**", LOCKFILE_RELATIVE_PATH] as cons
 /** 既定で禁止する workflow の pattern（設定に依らない。workflow の自己書き換え禁止）。 */
 const WORKFLOW_PATTERNS = [".github/workflows/**"] as const;
 
+/**
+ * `.ai/project.yaml` 自体の変更を built-in で検出する pattern（設定に依らない）。
+ * guard は project.yaml / policy を merge-base（PR からは書き換えられない revision）から読むため
+ * 自己改変で判定を迂回されることはないが、「検証ルールそのものが変わる PR」は内容次第で妥当な変更
+ * （risk_level の見直し等）もあり得るため forbidden にはせず、必ず目に留まるよう built-in violation
+ * として報告し、人間レビューを促す。
+ */
+const PROJECT_CONFIG_PATTERNS = [PROJECT_YAML_PATH] as const;
+
 /** 1 ファイルの検証に使う matcher 一式。`allowed` は未定義なら「制限なし」を表す。 */
 interface GuardMatchers {
   forbidden: GuardMatcher[];
   managed: GuardMatcher[];
   workflow: GuardMatcher[];
+  projectConfig: GuardMatcher[];
   allowed: GuardMatcher[] | undefined;
 }
 
@@ -144,6 +156,14 @@ function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolat
     });
   }
 
+  if (firstMatch(matchers.projectConfig, file.path) !== undefined) {
+    violations.push({
+      kind: "project_config",
+      path: file.path,
+      message: `guard の検証ルールを定める設定ファイルの変更です。人間レビューで内容を必ず確認してください: ${file.path}`,
+    });
+  }
+
   if (matchers.allowed !== undefined && firstMatch(matchers.allowed, file.path) === undefined) {
     violations.push({
       kind: "outside_allowed_paths",
@@ -162,8 +182,14 @@ function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolat
  *   1. forbidden_paths（project.yaml の `ai.forbidden_paths` ∪ policy の `forbidden_paths`）
  *   2. managed files（`.ai/managed/**` と lock file）
  *   3. workflows（`.github/workflows/**`。設定に依らない既定の forbidden）
- *   4. allowed_paths（project.yaml の `ai.allowed_paths` が定義されている場合のみ。未定義なら制限なし）
- *   5. change_limits（変更ファイル数の実効上限は project.yaml 優先・追加行数合計は policy のみ）
+ *   4. project_config（`.ai/project.yaml` 自体の変更。設定に依らない既定の built-in。禁止ではなく
+ *      人間レビューを促す通知として報告する）
+ *   5. allowed_paths（project.yaml の `ai.allowed_paths` が定義されている場合のみ。未定義なら制限なし）
+ *   6. change_limits（変更ファイル数の実効上限は project.yaml 優先・追加行数合計は policy のみ）
+ *
+ * `projectConfig` / `policy` は呼び出し側（commands/guard.ts）が merge-base（PR からは書き換えられない
+ * revision）から読んだ値を渡す前提。ここではその revision の違いを意識しない（同じ入力なら同じ結果を
+ * 返す純粋関数）。
  */
 export function runGuard(input: RunGuardInput): GuardReport {
   const { changedFiles, projectConfig, policy } = input;
@@ -178,6 +204,7 @@ export function runGuard(input: RunGuardInput): GuardReport {
     forbidden: forbiddenPatterns.map(matcherFor),
     managed: MANAGED_FILE_PATTERNS.map(matcherFor),
     workflow: WORKFLOW_PATTERNS.map(matcherFor),
+    projectConfig: PROJECT_CONFIG_PATTERNS.map(matcherFor),
     allowed: allowedPatterns?.map(matcherFor),
   };
 
