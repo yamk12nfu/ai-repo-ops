@@ -84,6 +84,8 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
 - `--base` には **fetch 済みの ref** を渡す（例: `origin/main`、または
   `github.event.pull_request.base.sha`）。shallow clone で base が無いと
   `GIT_MERGE_BASE_FAILED`（exit 3）になる。
-- 中央の reusable workflow（`ai-review.reusable.yml`）のエンジンを guard に差し替える計画は
-  [計画 03](./plans/03-guard-and-improve-loop.md) Stage 1-2 を参照。guard は AI レビューと違い
-  「PR を block する」検証なので、required check にしてよい。
+- 中央の reusable workflow（`ai-review.reusable.yml`）のエンジンは guard に**差し替え済み**
+  （計画 03 Stage 1-2）。対象 repo で PR を開くと guard が実行され、違反時は job が fail し
+  違反一覧が step summary と PR コメントに出る。guard は AI レビューと違い「PR を block する」
+  検証なので、required check にしてよい。base に検証ルールが無い場合（導入 PR 等）は
+  明示 skip で workflow は成功する。
