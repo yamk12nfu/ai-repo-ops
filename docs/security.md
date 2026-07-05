@@ -75,6 +75,8 @@ permissions:
 
 `ai-review` workflow は `contents: write` を持つべきではない（`aro doctor` が top-level / job 単位いずれの permissions でも `contents: write` あるいは `write-all` を検出すると **FAIL** にする）。`ai-improve` workflow は PR 作成のために `contents: write` を持つ想定だが、main への直接 push は禁止する運用前提とし、`aro doctor` では **WARN** に留める。
 
+> **方向転換（2026-07-05）**: `ai-improve` の `contents: write` は「CI 内で AI が改善 PR を自動作成する」旧設計の名残である。現行の reusable workflow は stub（echo のみ）で実書き込みは行わないが、現方針では CI 内で AI を実行しない（改善ループは開発者のローカル環境で回す。[計画 03](./plans/03-guard-and-improve-loop.md) 参照）ため、この権限は不要になる。計画 03 Stage 2-2 で配布物からの除去・権限の縮小・`aro doctor` の WARN 判定の見直しをセットで行う。
+
 `id-token: write` は `ai-review` の AI レビューエンジン（`claude-code-action`）の既定認証（OIDC 経由の短命トークン発行）に必要なため付与している。`contents: write` を与えない方針には影響せず、`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
 
 `aro doctor` は次も検査する。
@@ -88,9 +90,11 @@ central reusable workflow（yamk12nfu/ai-repo-ops/.github/workflows/<file>）を
 
 ## secret / token
 
-`ai-review` の reusable workflow（`ai-review.reusable.yml`）は `workflow_call.secrets.anthropic_api_key` を明示的に受け取る。配布側 `ai-review.yml` も `secrets: { anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} }` のように明示的に渡しており、`secrets: inherit` は使わない方針を維持している（`ai-repo-ops-implementation-plan-v3.md` §20.5）。
+`ai-review` の reusable workflow（`ai-review.reusable.yml`）は `workflow_call.secrets.anthropic_api_key` を明示的に受け取る（`required: false`。未設定なら実行時 gate で明示 skip）。配布側 `ai-review.yml` も `secrets: { anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} }` のように明示的に渡しており、`secrets: inherit` は使わない方針を維持している（`ai-repo-ops-implementation-plan-v3.md` §20.5）。
 
 fork PR には GitHub の仕様上 secrets が渡らないため、AI レビューは明示的に skip される（workflow 自体は成功する）。詳細は [`ai-review.md`](./ai-review.md) を参照。
+
+> **方向転換（2026-07-05）**: 現方針では対象 repo に `ANTHROPIC_API_KEY` を登録する運用は行わない（CI 内で AI を実行しないため。[計画 02 の注記](./plans/02-ai-review-commenter.md) 参照）。secrets の受け取り口（`anthropic_api_key`）は reusable workflow の互換性契約として残るが、計画 03 Stage 1-2 の guard エンジンへの差し替え以降は使用されない。
 
 ## managed file 誤編集からの復旧
 

@@ -73,7 +73,9 @@
    - permissions は現行のまま（`contents: read` / `pull-requests: write` / `issues: write`）。
      **`contents: write` は与えない。**
 3. **secrets 経路を通す**:
-   - reusable 側: `workflow_call.secrets.anthropic_api_key`（required）
+   - reusable 側: `workflow_call.secrets.anthropic_api_key`（実装では `required: false`。
+     secrets ブロックを持たない旧配布版 caller の後方互換のため計画から変更し、
+     未設定時は実行時 gate で明示 skip する）
    - 配布側 `ai-review.yml`: `secrets.anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}` を追記
    - `secrets: inherit` は使わない（既定方針どおり）
    - distribution 更新に伴い `manifest.yaml` の version bump + リリース（計画 01 の手順で `v0.1.x`）
@@ -87,16 +89,21 @@
 6. ~~**フィードバックを反映する**~~（**実施しない**。payload 検証は計画 03 のローカル改善ループへ）: `review.md` / `project.yaml.hbs` の初期値を運用結果で調整し、
    sync で行き渡ることを確認する（＝配布 → 消費 → 改善 → 再配布のループを 1 周させる）。
 
-## 受け入れ条件（DoD）（記録。方向転換により以後更新しない。実装で担保済みの項目のみ ✔ 相当）
+## 受け入れ条件（DoD）（記録。方向転換により最終判定しない）
 
-- [ ] 実 repo の PR に AI レビューコメントが自動で付く
-- [ ] コメント内容に `project.yaml` の設定（例: forbidden path への変更検知）が反映されている
-- [ ] workflow の書き込み権限が `pull-requests` / `issues` に限定されている（`contents: write` なし）
-- [ ] AI レビュー失敗時も PR の merge が block されない
-- [ ] fork からの PR では AI レビューが**明示的に skip** され、workflow 自体は成功する
+実装（v0.1.1）で担保済みの項目は `[x]`、実運用（dogfooding）でしか確認できない項目は方向転換により
+実施しないため `[ ]` のまま凍結する。
+
+- [ ] 実 repo の PR に AI レビューコメントが自動で付く（**実運用未確認**。dogfooding 中止のため確認しない）
+- [ ] コメント内容に `project.yaml` の設定（例: forbidden path への変更検知）が反映されている（同上）
+- [x] workflow の書き込み権限が `pull-requests` / `issues` に限定されている（`contents: write` なし）
+- [x] AI レビュー失敗時も PR の merge が block されない（`continue-on-error: true`）
+- [x] fork からの PR では AI レビューが**明示的に skip** され、workflow 自体は成功する
       （skip 理由が step summary に出る）
 - [ ] distribution 更新 → 対象 repo で `aro sync` → 新しい workflow / prompt が反映される、が 1 周している
+      （**実施しない**。計画 03 Stage 2-3 に引き継ぎ）
 - [ ] dogfooding の気づきが記録され、保留中の計画（conflict UX 等）の要否判断材料になっている
+      （**実施しない**。同上）
 
 ## リスク / 未決事項
 
