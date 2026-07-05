@@ -1,6 +1,6 @@
 {
   "name": "@ai-repo-ops/aro-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "aro CLI — ai-repo-ops の init / diff / sync / doctor / guard コマンド本体。",
