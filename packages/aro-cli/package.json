@@ -6,6 +6,9 @@
   "description": "aro CLI — ai-repo-ops の init / diff / sync / doctor / guard コマンド本体。",
   "license": "MIT",
   "main": "dist/main.js",
+  "bin": {
+    "aro": "bin/aro"
+  },
   "types": "dist/main.d.ts",
   "exports": {
     ".": {
@@ -13,7 +16,11 @@
       "import": "./dist/main.js"
     }
   },
+  "engines": {
+    "node": ">=20"
+  },
   "files": [
+    "bin",
     "dist",
     "src"
   ],
