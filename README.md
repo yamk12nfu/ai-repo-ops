@@ -4,7 +4,7 @@ AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配
 
 > ステータス: **MVP 完了**（Phase 0〜7）+ `aro guard`（計画 03 Stage 1）。`aro init` / `aro diff` / `aro sync` / `aro doctor` / `aro guard` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。リリース手順は [`RELEASE.md`](./RELEASE.md)、変更履歴は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
 
-AI 実行の方針は「**AI はローカル、CI は決定的検証**」。CI（配布 workflow）に従量課金 API キーの AI を組み込む方向は採らず、PR レビューは既存サービス（CodeRabbit 等）に任せる。`ai-review` workflow（`.github/workflows/ai-review.reusable.yml`）には v0.1.1 時点で claude-code-action ベースの AI レビュー実装があるが、**API キー未登録なら明示 skip されるだけで、dogfooding は行わない**（経緯は [`docs/plans/02-ai-review-commenter.md`](./docs/plans/02-ai-review-commenter.md) 冒頭の注記を参照）。CI のエンジンは `aro guard`（policies の機械的検証。AI 不要）に差し替え済みで、改善ループは開発者が手元の Claude Code で回す（[`docs/local-improve-loop.md`](./docs/local-improve-loop.md)、計画は [`docs/plans/03-guard-and-improve-loop.md`](./docs/plans/03-guard-and-improve-loop.md)）。`ai-improve` workflow（`ai-improve.reusable.yml`）は引き続き echo のみの **stub**。本ツールが担うのは AI 運用基盤の**配布・更新・診断・強制**（`aro init` / `diff` / `sync` / `doctor` / `guard`）である。
+AI 実行の方針は「**AI はローカル、CI は決定的検証**」。CI（配布 workflow）に従量課金 API キーの AI を組み込む方向は採らず、PR レビューは既存サービス（CodeRabbit 等）に任せる。`ai-review` workflow（`.github/workflows/ai-review.reusable.yml`）には v0.1.1 時点で claude-code-action ベースの AI レビュー実装があるが、**API キー未登録なら明示 skip されるだけで、dogfooding は行わない**（経緯は [`docs/plans/02-ai-review-commenter.md`](./docs/plans/02-ai-review-commenter.md) 冒頭の注記を参照）。CI のエンジンは `aro guard`（policies の機械的検証。AI 不要）に差し替え済みで、改善ループは開発者が手元の Claude Code で回す（[`docs/local-improve-loop.md`](./docs/local-improve-loop.md)、計画は [`docs/plans/03-guard-and-improve-loop.md`](./docs/plans/03-guard-and-improve-loop.md)）。`ai-improve` workflow は計画 03 Stage 2-2 で**配布物から除去済み**（改善ループはローカルで回すため CI 側に不要。`ai-improve.reusable.yml` は除去前に seed された既存 repo の `@v1` 参照を壊さないための書き込み権限なしの no-op stub としてのみ残す）。本ツールが担うのは AI 運用基盤の**配布・更新・診断・強制**（`aro init` / `diff` / `sync` / `doctor` / `guard`）である。
 
 ## Documentation
 
@@ -72,7 +72,8 @@ base と HEAD の diff（merge-base 比較）を `.ai/project.yaml` と適用 po
   中央 distribution の更新に追従できていない・sync 済みファイルがディスクから消えている状態
   （`aro sync` で自動解消される drift）は WARN として検出する。
 - lock file にあるが現在の manifest に無い managed file は `orphaned` として WARN する（MVP では自動削除しない）。
-- `.github/workflows/ai-review.yml` / `ai-improve.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission（`write-all` 省略記法・job-level のpermissionsブロックも含む）をチェックする。
+- `.github/workflows/ai-review.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission（`write-all` 省略記法・job-level のpermissionsブロックも含む）をチェックする。
+- 配布終了済みの `.github/workflows/ai-improve.yml`（legacy seed）が残っていれば WARN として手動削除を案内する（`create_only` のため `aro sync` では消えない）。
 - `.gitignore` / `.gitattributes` / `.prettierignore` に必要行が揃っているかを確認する。
 - 終了コード: `0`=FAIL なし / `1`=FAIL あり / `3`=unexpected error（repo path 不正・source 読込失敗など）。
 

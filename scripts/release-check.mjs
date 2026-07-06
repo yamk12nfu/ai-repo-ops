@@ -20,7 +20,7 @@
  *      付け替え忘れという事故は origin 側で起きるため、ローカルタグではなく origin を正とする）
  *   e. origin の moving tag `v<major>` が、origin の `v<version>` と同じ commit を指すこと。
  *      `<major>` はリリース version の semver major **ではなく**、実際に配布されている
- *      `distribution/base/files/.github/workflows/ai-review.yml` / `ai-improve.yml` が参照する
+ *      `distribution/base/files/.github/workflows/ai-review.yml` が参照する
  *      reusable workflow の `@vN`（RELEASE.md §1 の compat line）から読み取る。
  *      両者は別軸（例: 本リポジトリは product version `0.1.0` の段階で moving tag は既に `v1`）
  *
@@ -51,7 +51,6 @@ const MANIFEST = path.join(ROOT, "distribution", "base", "manifest.yaml");
 const CHANGELOG = path.join(ROOT, "CHANGELOG.md");
 const WORKFLOWS_DIR = path.join(ROOT, "distribution", "base", "files", ".github", "workflows");
 const REVIEW_WORKFLOW = path.join(WORKFLOWS_DIR, "ai-review.yml");
-const IMPROVE_WORKFLOW = path.join(WORKFLOWS_DIR, "ai-improve.yml");
 
 const SEMVER_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -76,7 +75,7 @@ async function readManifestVersion(absolute) {
 }
 
 /**
- * 配布用 workflow ファイル（ai-review.yml / ai-improve.yml）が参照している reusable workflow の
+ * 配布用 workflow ファイル（ai-review.yml）が参照している reusable workflow の
  * moving tag（`uses: .../ai-review.reusable.yml@vN` の `vN`）を読む。
  */
 async function readReferencedMovingTag(absolute) {
@@ -193,15 +192,12 @@ async function main() {
       // e. origin の moving tag v<major> が origin の v<version> と同じ commit を指すこと。
       //    <major> は配布中の workflow ファイルが実際に参照している compat line から読む
       //    （リリース version の semver major とは別軸。RELEASE.md §0 / §1 参照）。
-      const [reviewTag, improveTag] = await Promise.all([
-        readReferencedMovingTag(REVIEW_WORKFLOW),
-        readReferencedMovingTag(IMPROVE_WORKFLOW),
-      ]);
-      if (!reviewTag || !improveTag || reviewTag !== improveTag) {
+      const reviewTag = await readReferencedMovingTag(REVIEW_WORKFLOW);
+      if (!reviewTag) {
         record(
           "e. moving tag が release タグと同じ commit を指す",
           false,
-          `ai-review.yml@${reviewTag ?? "(見つかりません)"} ai-improve.yml@${improveTag ?? "(見つかりません)"} が一致しません`,
+          "ai-review.yml から reusable workflow の @vN 参照を読み取れません",
         );
       } else {
         const movingTag = reviewTag;

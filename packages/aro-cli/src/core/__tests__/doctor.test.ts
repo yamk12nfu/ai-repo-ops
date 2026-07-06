@@ -417,7 +417,8 @@ describe("runDoctor: GitHub Actions workflow", () => {
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
 
     expect(findCheck(report, "workflow.ai-review.exists")?.status).toBe("fail");
-    expect(findCheck(report, "workflow.ai-improve.exists")?.status).toBe("fail");
+    // ai-improve は配布終了（計画 03 Stage 2-2）。存在しないのが正常なのでチェック自体が出ない。
+    expect(findCheck(report, "workflow.ai-improve.legacy")).toBeUndefined();
   });
 
   it("reusable workflow を呼んでいなければ FAIL", async () => {
@@ -581,7 +582,7 @@ jobs:
     expect(findCheck(report, "workflow.ai-review.permissions")?.status).toBe("fail");
   });
 
-  it("ai-improve workflow の contents:write は WARN（改善モードのため許容・branch protection の注意喚起）", async () => {
+  it("legacy ai-improve workflow が残っていれば WARN（手動削除を案内。個別チェックは出さない）", async () => {
     await setupBaseDistribution(sourceRoot);
     await initGitRepo(repoRoot);
     await writeRaw(
@@ -601,9 +602,12 @@ jobs:
     const dist = await loadDistribution(sourceRoot, "base");
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
 
-    const check = findCheck(report, "workflow.ai-improve.permissions");
+    const check = findCheck(report, "workflow.ai-improve.legacy");
     expect(check?.status).toBe("warn");
-    expect(check?.hint).toContain("branch protection");
+    expect(check?.hint).toContain("git rm");
+    // legacy 扱いのため exists / reusable-call / permissions の個別チェックは出さない。
+    expect(findCheck(report, "workflow.ai-improve.exists")).toBeUndefined();
+    expect(findCheck(report, "workflow.ai-improve.permissions")).toBeUndefined();
   });
 
   it("permissions: write-all（scalar shorthand）も contents:write 相当として検出する", async () => {
@@ -683,24 +687,10 @@ jobs:
     uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml@v1
 `,
     );
-    await writeRaw(
-      repoRoot,
-      ".github/workflows/ai-improve.yml",
-      `name: AI Improve
-on:
-  workflow_dispatch: {}
-permissions:
-  contents: write
-jobs:
-  ai_improve:
-    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-improve.reusable.yml@v1
-`,
-    );
-
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
     expect(report.summary.failed).toBe(0);
     expect(report.hasFailures).toBe(false);
-    // ai-improve の contents:write と test コマンド空文字で WARN が出る。
+    // test コマンド空文字で WARN が出る。
     expect(report.summary.warned).toBeGreaterThan(0);
   });
 });

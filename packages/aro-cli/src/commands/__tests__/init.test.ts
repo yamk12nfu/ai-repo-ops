@@ -264,7 +264,6 @@ describe("executeInit: 実 distribution/base に対するエンドツーエン�
       ".ai/managed/schemas/project.schema.json",
       ".ai/project.yaml",
       ".github/workflows/ai-review.yml",
-      ".github/workflows/ai-improve.yml",
       ".gitignore",
       ".gitattributes",
       ".prettierignore",
@@ -272,6 +271,9 @@ describe("executeInit: 実 distribution/base に対するエンドツーエン�
     ]) {
       expect(await exists(rel), `${rel} should exist`).toBe(true);
     }
+
+    // ai-improve は配布終了（計画 03 Stage 2-2）。新規 init では作成されない。
+    expect(await exists(".github/workflows/ai-improve.yml")).toBe(false);
 
     // §0.2.3: managed file 保護行が .prettierignore に入る。
     expect(await read(".prettierignore")).toContain(".ai/managed/");

@@ -13,7 +13,8 @@
  *   - FAIL: 必須アーティファクトの欠如・schema 違反・人間による managed file の直接編集など、
  *     安全に自動修復できない、または見過ごすとセキュリティ/正しさに影響する状態。
  *   - WARN: `aro sync` で自動的に解消される drift（orphaned managed file・patch 未追記）や、
- *     許容されるが注意を要する設定（`ai-improve` の contents:write・workflow の @main 参照・空 command）。
+ *     許容されるが注意を要する設定（legacy `ai-improve` workflow の残置・workflow の @main 参照・
+ *     空 command）。
  */
 import { lstat } from "node:fs/promises";
 import path from "node:path";
@@ -442,13 +443,11 @@ function matchCentralReusableWorkflow(
   return { status: "not-found" };
 }
 
-/** 1 workflow（ai-review / ai-improve）の診断仕様。 */
+/** 必須 workflow（ai-review）の診断仕様。 */
 interface WorkflowSpec {
   relPath: string;
   reusableFilename: string;
   label: string;
-  /** `permissions.contents: write` を検出したときの重大度。 */
-  contentsWriteSeverity: "fail" | "warn";
 }
 
 const WORKFLOW_SPECS: readonly WorkflowSpec[] = [
@@ -456,15 +455,30 @@ const WORKFLOW_SPECS: readonly WorkflowSpec[] = [
     relPath: ".github/workflows/ai-review.yml",
     reusableFilename: "ai-review.reusable.yml",
     label: "ai-review",
-    contentsWriteSeverity: "fail",
-  },
-  {
-    relPath: ".github/workflows/ai-improve.yml",
-    reusableFilename: "ai-improve.reusable.yml",
-    label: "ai-improve",
-    contentsWriteSeverity: "warn",
   },
 ];
+
+/**
+ * 配布を終了した legacy seed file（計画 03 Stage 2-2）。
+ * `create_only` のため配布を止めても既存 repo からは消えない。残置を検出したら
+ * 手動削除を促す WARN を出す。存在しないのが正常状態なので、無ければチェック自体を出さない。
+ */
+const LEGACY_AI_IMPROVE_PATH = ".github/workflows/ai-improve.yml";
+
+async function checkLegacyAiImprove(repoRoot: string): Promise<DoctorCheck[]> {
+  const text = await readTargetText(repoRoot, LEGACY_AI_IMPROVE_PATH, "ai-improve workflow");
+  if (text === null) return [];
+  return [
+    {
+      id: "workflow.ai-improve.legacy",
+      status: "warn",
+      message: `${LEGACY_AI_IMPROVE_PATH} is a legacy workflow that is no longer distributed`,
+      hint:
+        "CI 内で AI 改善は実行しない方針になりました（改善ループはローカルで回します。docs/local-improve-loop.md 参照）。" +
+        "`git rm .github/workflows/ai-improve.yml` で削除してください（create_only のため sync では消えません）。",
+    },
+  ];
+}
 
 /** GitHub Actions workflow 1 件の診断（§17.4 GitHub Actions / §13.3）。 */
 async function checkWorkflow(repoRoot: string, spec: WorkflowSpec): Promise<DoctorCheck[]> {
@@ -525,21 +539,12 @@ async function checkWorkflow(repoRoot: string, spec: WorkflowSpec): Promise<Doct
   }
 
   if (info.hasContentsWrite) {
-    checks.push(
-      spec.contentsWriteSeverity === "fail"
-        ? {
-            id: `workflow.${spec.label}.permissions`,
-            status: "fail",
-            message: `${spec.label} workflow has contents:write permission`,
-            hint: "review workflow は contents:write を持つべきではありません。",
-          }
-        : {
-            id: `workflow.${spec.label}.permissions`,
-            status: "warn",
-            message: `${spec.label} workflow has contents:write permission`,
-            hint: "This is expected for improve mode, but keep branch protection enabled.",
-          },
-    );
+    checks.push({
+      id: `workflow.${spec.label}.permissions`,
+      status: "fail",
+      message: `${spec.label} workflow has contents:write permission`,
+      hint: "配布 workflow は contents:write を持つべきではありません（CI 内で AI は書き込みを行いません）。",
+    });
   }
 
   return checks;
@@ -565,6 +570,7 @@ export async function runDoctor(input: RunDoctorInput): Promise<DoctorReport> {
   for (const spec of WORKFLOW_SPECS) {
     checks.push(...(await checkWorkflow(repoRoot, spec)));
   }
+  checks.push(...(await checkLegacyAiImprove(repoRoot)));
 
   const summary: DoctorSummary = {
     passed: checks.filter((c) => c.status === "pass").length,

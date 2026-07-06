@@ -1,6 +1,6 @@
 schema_version: 1
 name: base
-version: 0.1.2
+version: 0.1.3
 
 files:
   - src: files/.ai/managed/prompts/review.md
@@ -42,10 +42,6 @@ seed_files:
 
   - src: files/.github/workflows/ai-review.yml
     dest: .github/workflows/ai-review.yml
-    strategy: create_only
-
-  - src: files/.github/workflows/ai-improve.yml
-    dest: .github/workflows/ai-improve.yml
     strategy: create_only
 
 patches:

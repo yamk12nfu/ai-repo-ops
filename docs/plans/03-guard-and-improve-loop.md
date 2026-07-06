@@ -125,6 +125,14 @@ CI の cron で AI を実行する代わりに、開発者が手元で回す:
 
 ### Stage 2-2: `ai-improve` 系配布物の整理
 
+> **実施済み（2026-07-07）**: 配布側 `ai-improve.yml`（cron + `contents: write`）を**配布物から除去**した
+> （manifest から seed エントリを削除・配布ファイルを削除・manifest version bump）。
+> `ai-improve.reusable.yml` は、除去前に seed された既存 repo の `@v1` 参照を壊さないための
+> **no-op stub**（`contents: read` のみ）としてのみ残す。`aro doctor` は ai-improve を必須 workflow
+> から外し、残置を検出したら手動削除を案内する WARN（`workflow.ai-improve.legacy`）に変更した。
+> dogfooding を待たずに除去した理由: CI 内 AI 実行は本計画で恒久的に非スコープと確定しており、
+> seed 済み repo がほぼ存在しない今が既存 repo への影響が最小のタイミングであるため。
+
 CI 内 AI 実行がなくなったため、cron 前提の `ai-improve` 系 workflow は役割を失う:
 
 - `ai-improve.reusable.yml`（stub）と配布側 `ai-improve.yml`（cron + dispatch）を**配布物から除く**か、
