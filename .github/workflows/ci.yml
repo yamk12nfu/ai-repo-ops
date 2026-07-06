@@ -42,3 +42,57 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # 配布経路（pack した tarball からのインストール）の退行を検出する smoke test（計画 04）。
+  pack-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Pack aro-cli
+        run: pnpm -C packages/aro-cli pack --pack-destination "$RUNNER_TEMP"
+
+      - name: Install tarball and run smoke test
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="$RUNNER_TEMP/install"
+          mkdir -p "$INSTALL_DIR"
+          cd "$INSTALL_DIR"
+          npm init -y > /dev/null
+          npm install "$RUNNER_TEMP"/ai-repo-ops-aro-cli-*.tgz > /dev/null
+          ./node_modules/.bin/aro --help > /dev/null
+          echo "aro --help OK"
+          FIXTURE="$RUNNER_TEMP/fixture"
+          mkdir -p "$FIXTURE" && git -C "$FIXTURE" init -q
+          ./node_modules/.bin/aro init --repo "$FIXTURE" --source "$GITHUB_WORKSPACE" > /dev/null
+          ./node_modules/.bin/aro doctor --repo "$FIXTURE" --source "$GITHUB_WORKSPACE" > /dev/null
+          echo "init + doctor with --source OK"
+
+      - name: Source-not-found error is helpful
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/install"
+          FIXTURE2="$RUNNER_TEMP/fixture2"
+          mkdir -p "$FIXTURE2" && git -C "$FIXTURE2" init -q
+          set +e
+          OUT="$(./node_modules/.bin/aro init --repo "$FIXTURE2" 2>&1)"
+          CODE=$?
+          set -e
+          echo "$OUT"
+          # tarball install では上方探索が成立しないため、--source の案内つきで fail すること
+          test "$CODE" -ne 0
+          echo "$OUT" | grep -q -- "--source"
+          echo "SOURCE_NOT_FOUND error OK"

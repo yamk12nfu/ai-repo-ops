@@ -9,14 +9,11 @@
   "engines": {
     "node": ">=20"
   },
-  "bin": {
-    "aro": "bin/aro"
-  },
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "aro": "node bin/aro",
+    "aro": "node packages/aro-cli/bin/aro",
     "schema:sync": "node scripts/sync-managed-schema.mjs",
     "schema:check": "node scripts/sync-managed-schema.mjs --check",
     "release:check": "node scripts/release-check.mjs"
