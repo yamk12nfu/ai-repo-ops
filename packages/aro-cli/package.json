@@ -16,6 +16,9 @@
       "import": "./dist/main.js"
     }
   },
+  "engines": {
+    "node": ">=20"
+  },
   "files": [
     "bin",
     "dist",

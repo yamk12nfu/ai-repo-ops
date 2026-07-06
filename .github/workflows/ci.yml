@@ -88,11 +88,33 @@ jobs:
           FIXTURE2="$RUNNER_TEMP/fixture2"
           mkdir -p "$FIXTURE2" && git -C "$FIXTURE2" init -q
           set +e
-          OUT="$(./node_modules/.bin/aro init --repo "$FIXTURE2" 2>&1)"
+          OUT="$(./node_modules/.bin/aro init --repo "$FIXTURE2" --json 2>&1)"
           CODE=$?
           set -e
           echo "$OUT"
-          # tarball install では上方探索が成立しないため、--source の案内つきで fail すること
-          test "$CODE" -ne 0
-          echo "$OUT" | grep -q -- "--source"
+          # tarball install では上方探索が成立しないため、validation error（exit 1）として
+          # SOURCE_NOT_FOUND + --source の案内つきで fail すること（文字列一致ではなく
+          # 安定した error.code で検証し、別の失敗による誤検出を防ぐ）
+          test "$CODE" -eq 1
+          node -e '
+            const obj = JSON.parse(process.argv[1]);
+            if (obj.error?.code !== "SOURCE_NOT_FOUND") process.exit(1);
+            if (!obj.error?.hint?.includes("--source")) process.exit(1);
+          ' "$OUT"
           echo "SOURCE_NOT_FOUND error OK"
+
+      # 第一級サポート経路（中央 repo クローン + pnpm link --global）の smoke test。
+      # link 経由なら実体が workspace 内に留まり、--source なしで上方探索が機能すること。
+      - name: Link --global smoke test
+        run: |
+          set -euo pipefail
+          export PNPM_HOME="$RUNNER_TEMP/pnpm-home"
+          mkdir -p "$PNPM_HOME"
+          export PATH="$PNPM_HOME:$PATH"
+          pnpm -C packages/aro-cli link --global
+          FIXTURE3="$RUNNER_TEMP/fixture3"
+          mkdir -p "$FIXTURE3" && git -C "$FIXTURE3" init -q
+          cd "$RUNNER_TEMP"
+          aro init --repo "$FIXTURE3" > /dev/null
+          aro doctor --repo "$FIXTURE3" > /dev/null
+          echo "link --global: init + doctor without --source OK"
