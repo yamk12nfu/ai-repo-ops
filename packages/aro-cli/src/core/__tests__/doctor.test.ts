@@ -409,6 +409,72 @@ describe("runDoctor: append_unique_lines patch（.gitignore / .gitattributes / .
   });
 });
 
+describe("runDoctor: distribution content drift（§10.5）", () => {
+  it("lock の content sha が source と一致していれば PASS", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist);
+
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+    expect(findCheck(report, "distribution.content")?.status).toBe("pass");
+    expect(findCheck(report, "distribution.content-drift")).toBeUndefined();
+  });
+
+  it("seed の配布終了のように実ファイル差分の無い配布変更でも、lock 更新が必要なら WARN", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist1 = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist1);
+
+    // workflow seed を配布終了した manifest へ差し替える（managed files / patches は不変）。
+    await writeRaw(
+      sourceRoot,
+      "distribution/base/manifest.yaml",
+      `schema_version: 1
+name: base
+version: 0.1.1
+files:
+  - src: files/.ai/managed/prompts/review.md
+    dest: .ai/managed/prompts/review.md
+    strategy: managed_overwrite
+  - src: files/.ai/managed/policies/default.yaml
+    dest: .ai/managed/policies/default.yaml
+    strategy: managed_overwrite
+seed_files:
+  - dest: .ai/project.yaml
+    template: project.yaml.hbs
+    strategy: create_only
+patches:
+  - type: append_unique_lines
+    path: .gitignore
+    lines:
+      - .ai/runs/
+      - .ai/tmp/
+      - .ai/logs/
+  - type: append_unique_lines
+    path: .gitattributes
+    lines:
+      - "# ai-repo-ops managed text files"
+      - ".ai/managed/** text eol=lf"
+preserve:
+  - .ai/project.yaml
+  - .ai/local/**
+`,
+    );
+    const dist2 = await loadDistribution(sourceRoot, "base");
+
+    const report = await runDoctor({ repoRoot, distribution: dist2, projectSchema: PROJECT_SCHEMA });
+
+    // 実ファイルはすべて最新のまま（managed checksum は PASS）だが、lock は古い。
+    expect(findCheck(report, "managed.checksums")?.status).toBe("pass");
+    const drift = findCheck(report, "distribution.content-drift");
+    expect(drift?.status).toBe("warn");
+    expect(drift?.hint).toContain("aro sync");
+    expect(findCheck(report, "distribution.content")).toBeUndefined();
+  });
+});
+
 describe("runDoctor: GitHub Actions workflow", () => {
   it("workflow が無ければ FAIL", async () => {
     await setupBaseDistribution(sourceRoot);

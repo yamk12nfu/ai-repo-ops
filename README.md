@@ -72,6 +72,8 @@ base と HEAD の diff（merge-base 比較）を `.ai/project.yaml` と適用 po
   中央 distribution の更新に追従できていない・sync 済みファイルがディスクから消えている状態
   （`aro sync` で自動解消される drift）は WARN として検出する。
 - lock file にあるが現在の manifest に無い managed file は `orphaned` として WARN する（MVP では自動削除しない）。
+- lock の distribution content hash が中央 source とずれていれば WARN する（seed の配布終了のように
+  実ファイル差分を生まない配布変更でも `aro sync` による lock 更新が必要なことを検出する）。
 - `.github/workflows/ai-review.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission（`write-all` 省略記法・job-level のpermissionsブロックも含む）をチェックする。
 - 配布終了済みの `.github/workflows/ai-improve.yml`（legacy seed）が残っていれば WARN として手動削除を案内する（`create_only` のため `aro sync` では消えない）。
 - `.gitignore` / `.gitattributes` / `.prettierignore` に必要行が揃っているかを確認する。

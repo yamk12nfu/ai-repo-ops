@@ -123,23 +123,24 @@ CI の cron で AI を実行する代わりに、開発者が手元で回す:
 - 必要なら `aro` 側の補助（例: `aro guard --json` の出力をループが読みやすい形にする）。
   専用サブコマンド（`aro improve`）の新設は、手動運用で痛みが実証されるまで見送る
 
-### Stage 2-2: `ai-improve` 系配布物の整理
+### Stage 2-2: `ai-improve` 系配布物の整理 — **実施済み（2026-07-07）**
 
-> **実施済み（2026-07-07）**: 配布側 `ai-improve.yml`（cron + `contents: write`）を**配布物から除去**した
-> （manifest から seed エントリを削除・配布ファイルを削除・manifest version bump）。
-> `ai-improve.reusable.yml` は、除去前に seed された既存 repo の `@v1` 参照を壊さないための
-> **no-op stub**（`contents: read` のみ）としてのみ残す。`aro doctor` は ai-improve を必須 workflow
-> から外し、残置を検出したら手動削除を案内する WARN（`workflow.ai-improve.legacy`）に変更した。
-> dogfooding を待たずに除去した理由: CI 内 AI 実行は本計画で恒久的に非スコープと確定しており、
-> seed 済み repo がほぼ存在しない今が既存 repo への影響が最小のタイミングであるため。
+CI 内 AI 実行がなくなったため、cron 前提の `ai-improve` 系 workflow は役割を失った。
+「配布物から除くか、無害な stub のまま残すか」は**配布物から除く**を採り、次のとおり実施した:
 
-CI 内 AI 実行がなくなったため、cron 前提の `ai-improve` 系 workflow は役割を失う:
+- 配布側 `ai-improve.yml`（cron + `contents: write`）を manifest の `seed_files` から削除し、
+  配布ファイルも削除（distribution 変更に伴い manifest version bump）
+- `ai-improve.reusable.yml` は、除去前に seed された既存 repo の `@v1` 参照が workflow 解決エラーで
+  壊れないための **no-op stub**（`contents: read` のみ・inputs は互換性契約として不変）としてのみ残す
+- `aro doctor` は ai-improve を必須 workflow（WORKFLOW_SPECS）から外し、残置を検出したら手動削除を
+  案内する WARN（`workflow.ai-improve.legacy`）に変更（`create_only` のため sync では消えない。
+  手動移行手順は `docs/distribution.md` の「配布終了した seed file の扱い」参照）
 
-- `ai-improve.reusable.yml`（stub）と配布側 `ai-improve.yml`（cron + dispatch）を**配布物から除く**か、
-  無害な stub のまま残すかを決める（`create_only` のため、除いても既存 repo からは消えない。
-  `aro doctor` の WORKFLOW_SPECS・manifest との整合もセットで変更する）
-- 判断基準: ローカル改善ループの dogfooding で「CI 側に改善系の workflow が必要になる場面」が
-  観測されるかどうか。観測されなければ次の distribution 更新で除く
+当初の判断基準は「dogfooding で CI 側に改善系 workflow が必要になる場面が観測されるか」だったが、
+CI 内 AI 実行は本計画で恒久的に非スコープと確定しており、seed 済み repo がほぼ存在しない今が
+既存 repo への影響が最小のタイミングであるため、dogfooding（Stage 2-3）を待たずに実施した。
+将来 CI 側に改善系 workflow が必要になった場合は、distribution 更新で再配布すれば `create_only` の
+seed として未保有 repo に展開できる。
 
 ### Stage 2-3: dogfooding（計画 02 から引き継ぎ）
 

@@ -24,6 +24,7 @@ import { readFileWithinRoot } from "./filesystem.js";
 import { DEFAULT_SOURCE_REPOSITORY, LOCKFILE_RELATIVE_PATH, loadLockFile, type LockFile } from "./lockfile.js";
 import { validateJsonSchema } from "./json-schema.js";
 import { PROJECT_YAML_PATH } from "./manifest.js";
+import { planHasContentDrift } from "./plan-summary.js";
 import { buildSyncPlan } from "./planner.js";
 import type { LoadedDistribution } from "./source.js";
 import { parseYaml } from "./yaml.js";
@@ -311,6 +312,23 @@ async function checkSyncPlanDerived(
         status: "warn",
         message: `orphaned managed file: ${o.path} (present in lock file but no longer present in source manifest)`,
         hint: "not deleted in MVP; automatic removal / rename migration is a post-MVP feature.",
+      });
+    }
+
+    // lock の distribution content sha と source のずれ（§10.5）。seed の配布終了のように
+    // 実ファイル差分を生まない配布変更でも lock 更新（sync）が必要なことを表面化する。
+    if (planHasContentDrift(plan)) {
+      checks.push({
+        id: "distribution.content-drift",
+        status: "warn",
+        message: "lock file is out of date with the central distribution content",
+        hint: "`aro sync --repo .` で lock file が最新化されます。",
+      });
+    } else {
+      checks.push({
+        id: "distribution.content",
+        status: "pass",
+        message: "lock file is up to date with the central distribution content",
       });
     }
   }
