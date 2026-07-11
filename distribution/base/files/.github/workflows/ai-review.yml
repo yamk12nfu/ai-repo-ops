@@ -7,9 +7,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-  # AI レビューエンジンのデフォルト認証（OIDC）に必要。contents: write は与えない。
-  id-token: write
 
 jobs:
   ai_review:

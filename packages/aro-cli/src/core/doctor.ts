@@ -358,7 +358,11 @@ interface WorkflowInfo {
   usesRefs: string[];
   /** workflow 全体（top-level またはいずれかの job）が contents:write 相当を付与しているか。 */
   hasContentsWrite: boolean;
+  /** 現行 guard が使わない旧 AI engine 向け write permission。 */
+  unusedWritePermissions: string[];
 }
+
+const UNUSED_AI_REVIEW_WRITE_PERMISSIONS = ["id-token", "issues"] as const;
 
 /**
  * GitHub Actions の `permissions` 値が contents:write 相当を付与するか判定する。
@@ -376,6 +380,14 @@ function permissionsGrantContentsWrite(permissions: unknown): boolean {
     return permissions["contents"] === "write";
   }
   return false;
+}
+
+/** 現行 guard が使用しない旧 AI engine 向け write permission を抽出する。 */
+function findUnusedAiReviewWritePermissions(permissions: unknown): string[] {
+  if (!isRecord(permissions)) return [];
+  return UNUSED_AI_REVIEW_WRITE_PERMISSIONS.filter((scope) => permissions[scope] === "write").map(
+    (scope) => `${scope}: write`,
+  );
 }
 
 /**
@@ -398,6 +410,7 @@ function parseWorkflowInfo(yamlText: string): WorkflowInfo | null {
   const jobs = isRecord(doc["jobs"]) ? doc["jobs"] : {};
   const usesRefs: string[] = [];
   let hasContentsWrite = permissionsGrantContentsWrite(doc["permissions"]);
+  const unusedWritePermissions = new Set(findUnusedAiReviewWritePermissions(doc["permissions"]));
   for (const job of Object.values(jobs)) {
     if (!isRecord(job)) continue;
     if (typeof job["uses"] === "string") {
@@ -406,8 +419,11 @@ function parseWorkflowInfo(yamlText: string): WorkflowInfo | null {
     if (permissionsGrantContentsWrite(job["permissions"])) {
       hasContentsWrite = true;
     }
+    for (const permission of findUnusedAiReviewWritePermissions(job["permissions"])) {
+      unusedWritePermissions.add(permission);
+    }
   }
-  return { usesRefs, hasContentsWrite };
+  return { usesRefs, hasContentsWrite, unusedWritePermissions: [...unusedWritePermissions].sort() };
 }
 
 /**
@@ -562,6 +578,15 @@ async function checkWorkflow(repoRoot: string, spec: WorkflowSpec): Promise<Doct
       status: "fail",
       message: `${spec.label} workflow has contents:write permission`,
       hint: "配布 workflow は contents:write を持つべきではありません（CI 内で AI は書き込みを行いません）。",
+    });
+  } else if (info.unusedWritePermissions.length > 0) {
+    checks.push({
+      id: `workflow.${spec.label}.permissions`,
+      status: "warn",
+      message: `${spec.label} workflow grants unused write permissions: ${info.unusedWritePermissions.join(", ")}`,
+      hint:
+        `${info.unusedWritePermissions.join(" / ")} を手動で削除してください。` +
+        `${spec.relPath} は create_only のため aro sync では更新されません。`,
     });
   }
 

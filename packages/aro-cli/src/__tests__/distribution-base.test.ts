@@ -53,6 +53,15 @@ const MANAGED_KNOWLEDGE_SCHEMA_COPY = path.join(
   "knowledge.schema.json",
 );
 const TEMPLATE = path.join(REPO_ROOT, "distribution", "base", "project.yaml.hbs");
+const DISTRIBUTED_REVIEW_WORKFLOW = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".github",
+  "workflows",
+  "ai-review.yml",
+);
 const REUSABLE_REVIEW_WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "ai-review.reusable.yml");
 const CI_WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "ci.yml");
 
@@ -272,6 +281,18 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
     const attributes = loaded.patches.find((patch) => patch.path === ".gitattributes");
     expect(attributes?.lines).toContain(".ai/local/knowledge/** text eol=lf");
+  });
+
+  it("配布するai-review workflowのpermissionsを必要最小限に限定する", async () => {
+    const workflow = parseYaml(await readFile(DISTRIBUTED_REVIEW_WORKFLOW, "utf8"));
+
+    expect(isPlainObject(workflow)).toBe(true);
+    if (isPlainObject(workflow)) {
+      expect(workflow["permissions"]).toEqual({
+        contents: "read",
+        "pull-requests": "write",
+      });
+    }
   });
 
   it("reusable workflowがknowledge導入repoだけを検証し、knowledge変更PRではstrictにする", async () => {

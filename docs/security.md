@@ -111,11 +111,13 @@ permissions:
   pull-requests: write
 ```
 
-`ai-review` workflow は `contents: write` を持つべきではない（`aro doctor` が top-level / job 単位いずれの permissions でも `contents: write` あるいは `write-all` を検出すると **FAIL** にする）。
+`ai-review` workflow は `contents: write` を持つべきではない（`aro doctor` が top-level / job 単位いずれの permissions でも `contents: write` あるいは `write-all` を検出すると **FAIL** にする）。現行 guard が使わない `id-token: write` / `issues: write` が残っている場合は、既存の `create_only` workflow に対する手動修正が必要なため **WARN** にする。
 
 > **方向転換の実施（2026-07-07・計画 03 Stage 2-2）**: `ai-improve` workflow（cron + `contents: write` を持つ「CI 内で AI が改善 PR を自動作成する」旧設計）は**配布物から除去した**。改善ループは開発者のローカル環境で回す（[計画 03](./plans/03-guard-and-improve-loop.md) / [`docs/local-improve-loop.md`](./local-improve-loop.md) 参照）。`ai-improve.reusable.yml` は、除去前に seed された既存 repo の `@v1` 参照が workflow 解決エラーにならないための **no-op stub**（`contents: read` のみ・checkout もしない）としてのみ残す。既存 repo に残る配布済み `ai-improve.yml` は `create_only` のため `aro sync` では消えず、`aro doctor` が **WARN** で手動削除（`git rm .github/workflows/ai-improve.yml`）を案内する。
 
-`id-token: write` は旧エンジン（`claude-code-action`）の既定認証（OIDC）向けに、過去の配布側 `ai-review.yml` に付与していたもの。guard エンジンへの差し替え（計画 03 Stage 1-2）後の reusable workflow は要求しない（callee が要求しない permission は caller にあっても使われないため、配布済み repo に残っていても無害）。`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
+`id-token: write` と `issues: write` は旧エンジン（`claude-code-action`）向けに、過去の配布側 `ai-review.yml` に付与していた権限である。guard エンジンへの差し替え（計画 03 Stage 1-2）後は使用しないため、配布テンプレートから削除した。新規に `aro init` する repo（または workflow が未作成の repo）には、`contents: read` と `pull-requests: write` だけを付与する。
+
+`.github/workflows/ai-review.yml` は `create_only` のため、既存 repo のファイルは `aro sync` では更新されない。既存 repo では同ファイルから `id-token: write` と `issues: write` を手動で削除し、上記2権限だけを残す。`aro doctor` は旧権限の残置を **WARN** として報告する。
 
 `aro doctor` は次も検査する。
 
@@ -124,6 +126,7 @@ workflow file の存在
 central reusable workflow（yamk12nfu/ai-repo-ops/.github/workflows/<file>）を owner/repo/path で厳密一致呼び出ししているか
 @ref（tag/branch/SHA）が付いているか（付いていない他リポジトリ reusable workflow 呼び出しは GitHub 側が invalid として拒否するため FAIL）
 中央 workflow への参照が @main に固定されている場合は WARN（安定した @v1 等のタグを推奨）
+現行 guard が使わない id-token: write / issues: write が残っている場合は WARN（create_only のため手動削除）
 ```
 
 ## secret / token
