@@ -267,12 +267,14 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(prompt).toContain("knowledge init` に使った同じlauncher");
     expect(prompt).toContain("knowledge init` の成功出力に完全な検証コマンドがある場合は、それを優先");
     expect(prompt).toContain("未commitの変更は `aro guard` の検証対象外");
-    expect(prompt.indexOf("6. `aro knowledge check")).toBeLessThan(
-      prompt.indexOf("7. 未commitの変更"),
-    );
-    expect(prompt.indexOf("7. 未commitの変更")).toBeLessThan(
-      prompt.indexOf("8. commit後に `aro guard"),
-    );
+    const checkIndex = prompt.indexOf("6. `aro knowledge check");
+    const uncommittedIndex = prompt.indexOf("7. 未commitの変更");
+    const guardIndex = prompt.indexOf("8. commit後に `aro guard");
+    expect(checkIndex).toBeGreaterThanOrEqual(0);
+    expect(uncommittedIndex).toBeGreaterThanOrEqual(0);
+    expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(checkIndex).toBeLessThan(uncommittedIndex);
+    expect(uncommittedIndex).toBeLessThan(guardIndex);
   });
 
   it("authoritative schema が valid な JSON Schema である", async () => {
