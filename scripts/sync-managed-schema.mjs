@@ -1,5 +1,5 @@
 /**
- * authoritative schema（schemas/project.schema.json）を distribution の managed copy へ同期する。
+ * authoritative schemas を distribution の managed copy へ同期する。
  *
  * 計画 v3 §0.2.5 / §4.1 に対応する。
  *   - `schemas/project.schema.json` を唯一の正とする。
@@ -23,20 +23,20 @@ import { fileURLToPath } from "node:url";
 /** repo root（このファイルは <root>/scripts/ にある）。 */
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-/** 唯一の正となる authoritative schema。 */
-const AUTHORITATIVE = path.join(ROOT, "schemas", "project.schema.json");
-
-/** distribution へ配布する managed copy（manifest の files[] が参照する src）。 */
-const MANAGED_COPY = path.join(
-  ROOT,
-  "distribution",
-  "base",
-  "files",
-  ".ai",
-  "managed",
-  "schemas",
-  "project.schema.json",
-);
+/** authoritative → managed copy の同期対象。 */
+const SCHEMAS = ["project.schema.json", "knowledge.schema.json"].map((filename) => ({
+  authoritative: path.join(ROOT, "schemas", filename),
+  managedCopy: path.join(
+    ROOT,
+    "distribution",
+    "base",
+    "files",
+    ".ai",
+    "managed",
+    "schemas",
+    filename,
+  ),
+}));
 
 /** repo root からの相対表示（ログ用）。 */
 function rel(absolute) {
@@ -64,41 +64,43 @@ async function readTextOrNull(absolute) {
 
 async function main() {
   const check = process.argv.slice(2).includes("--check");
+  let failed = false;
 
-  const authoritativeRaw = await readTextOrNull(AUTHORITATIVE);
-  if (authoritativeRaw === null) {
-    console.error(`ERROR: authoritative schema が見つかりません: ${rel(AUTHORITATIVE)}`);
-    process.exitCode = 1;
-    return;
-  }
-  const expected = canonicalize(authoritativeRaw);
-
-  if (check) {
-    const current = await readTextOrNull(MANAGED_COPY);
-    if (current === null) {
-      console.error(`FAIL: managed copy が存在しません: ${rel(MANAGED_COPY)}`);
-      console.error("      `pnpm schema:sync` を実行してください。");
-      process.exitCode = 1;
-      return;
+  for (const schema of SCHEMAS) {
+    const authoritativeRaw = await readTextOrNull(schema.authoritative);
+    if (authoritativeRaw === null) {
+      console.error(`ERROR: authoritative schema が見つかりません: ${rel(schema.authoritative)}`);
+      failed = true;
+      continue;
     }
-    if (canonicalize(current) !== expected) {
-      console.error(`FAIL: managed copy が authoritative schema と一致しません: ${rel(MANAGED_COPY)}`);
-      console.error("      `pnpm schema:sync` を実行して再コミットしてください。");
-      process.exitCode = 1;
-      return;
+    const expected = canonicalize(authoritativeRaw);
+    const current = await readTextOrNull(schema.managedCopy);
+
+    if (check) {
+      if (current === null) {
+        console.error(`FAIL: managed copy が存在しません: ${rel(schema.managedCopy)}`);
+        console.error("      `pnpm schema:sync` を実行してください。");
+        failed = true;
+      } else if (canonicalize(current) !== expected) {
+        console.error(`FAIL: managed copy が authoritative schema と一致しません: ${rel(schema.managedCopy)}`);
+        console.error("      `pnpm schema:sync` を実行して再コミットしてください。");
+        failed = true;
+      } else {
+        console.log(`OK: managed copy は最新です（${rel(schema.managedCopy)}）。`);
+      }
+      continue;
     }
-    console.log(`OK: managed copy は最新です（${rel(MANAGED_COPY)}）。`);
-    return;
+
+    if (current !== null && canonicalize(current) === expected) {
+      console.log(`unchanged: ${rel(schema.managedCopy)}`);
+      continue;
+    }
+    await mkdir(path.dirname(schema.managedCopy), { recursive: true });
+    await writeFile(schema.managedCopy, expected, "utf8");
+    console.log(`wrote: ${rel(schema.managedCopy)} <- ${rel(schema.authoritative)}`);
   }
 
-  const current = await readTextOrNull(MANAGED_COPY);
-  if (current !== null && canonicalize(current) === expected) {
-    console.log(`unchanged: ${rel(MANAGED_COPY)}`);
-    return;
-  }
-  await mkdir(path.dirname(MANAGED_COPY), { recursive: true });
-  await writeFile(MANAGED_COPY, expected, "utf8");
-  console.log(`wrote: ${rel(MANAGED_COPY)} <- ${rel(AUTHORITATIVE)}`);
+  if (failed) process.exitCode = 1;
 }
 
 main().catch((error) => {

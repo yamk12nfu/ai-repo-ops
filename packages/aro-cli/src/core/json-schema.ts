@@ -29,7 +29,9 @@ interface JsonSchemaNode {
   additionalProperties?: unknown;
   items?: unknown;
   minLength?: number;
+  minItems?: number;
   minimum?: number;
+  pattern?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -97,6 +99,20 @@ function validateNode(schemaRaw: unknown, value: unknown, path: string, issues: 
 
   if (typeof value === "string" && typeof schema.minLength === "number" && value.length < schema.minLength) {
     issues.push({ path, message: `must have length >= ${schema.minLength}` });
+  }
+
+  if (typeof value === "string" && typeof schema.pattern === "string") {
+    try {
+      if (!new RegExp(schema.pattern, "u").test(value)) {
+        issues.push({ path, message: `must match pattern ${JSON.stringify(schema.pattern)}` });
+      }
+    } catch {
+      issues.push({ path, message: `schema pattern is invalid: ${JSON.stringify(schema.pattern)}` });
+    }
+  }
+
+  if (Array.isArray(value) && typeof schema.minItems === "number" && value.length < schema.minItems) {
+    issues.push({ path, message: `must contain at least ${schema.minItems} items` });
   }
 
   if (typeof value === "number" && typeof schema.minimum === "number" && value < schema.minimum) {

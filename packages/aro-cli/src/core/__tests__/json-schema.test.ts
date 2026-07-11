@@ -83,7 +83,7 @@ describe("validateJsonSchema: required / properties / additionalProperties", () 
   });
 });
 
-describe("validateJsonSchema: items / minLength / minimum", () => {
+describe("validateJsonSchema: items / minLength / minItems / minimum / pattern", () => {
   it("array の各要素を items スキーマで検証する", () => {
     const schema = { type: "array", items: { type: "string" } };
     expect(validateJsonSchema(schema, ["a", "b"])).toEqual([]);
@@ -99,6 +99,17 @@ describe("validateJsonSchema: items / minLength / minimum", () => {
   it("minimum 未満の数値は issue", () => {
     expect(validateJsonSchema({ type: "integer", minimum: 1 }, 0)).toHaveLength(1);
     expect(validateJsonSchema({ type: "integer", minimum: 1 }, 1)).toEqual([]);
+  });
+
+  it("minItems 未満の配列は issue", () => {
+    expect(validateJsonSchema({ type: "array", minItems: 1 }, [])).toHaveLength(1);
+    expect(validateJsonSchema({ type: "array", minItems: 1 }, ["x"])).toEqual([]);
+  });
+
+  it("pattern に一致しない文字列は issue", () => {
+    const schema = { type: "string", pattern: "^[a-z]+(?:-[a-z]+)*$" };
+    expect(validateJsonSchema(schema, "repo-knowledge")).toEqual([]);
+    expect(validateJsonSchema(schema, "Repo_Knowledge")).toHaveLength(1);
   });
 });
 

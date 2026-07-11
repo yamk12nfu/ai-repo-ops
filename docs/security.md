@@ -57,6 +57,46 @@ manifest 内の配布先 path（`files[].dest` / `seed_files[].dest` / `patches[
 
 manifest が参照する `src` / `template` ファイル、および authoritative schema（`schemas/project.schema.json`）は、`TextDecoder("utf-8", { fatal: true })` で厳密に UTF-8 として decode できることを確認する。`Buffer#toString("utf8")` は不正なバイト列を置換文字（U+FFFD）へ静かに握りつぶすため、これでは壊れた配布ファイルを検出できない。fatal decode に失敗した場合は `SOURCE_FILE_NOT_UTF8` エラーとして拒否する。binary file の配布は MVP では対応しない。
 
+## Repo Knowledge の読み取り境界
+
+`aro knowledge check` が読む source は、index に明記された正確な repo 相対 path だけである。directory
+走査、glob 展開、外部 URL の取得は行わない。path を読む前に traversal / absolute path / glob meta を
+拒否し、`readFileWithinRoot` で親を含む symlink 非追従を再確認する。
+
+組み込み禁止 source:
+
+```txt
+.env
+.env.*
+secrets/**
+.git/**
+.ai/**
+node_modules/**（nestedを含む）
+dist/**（nestedを含む）
+build/**（nestedを含む）
+```
+
+これらの禁止patternは repo root だけでなく、すべての nested 階層に適用する。
+
+source はさらに、現在の HEAD に Git 追跡された regular UTF-8 text file でなければならない。
+`verified_at_commit` は完全な lowercase SHA に限定し、次を Git で検証する。
+
+- commit object が存在する。
+- commit が現在の HEAD の祖先である。
+- source がその commit に存在する。
+- その commit 以降、現在の working tree まで source 内容が変わっていない。
+
+これにより、rebaseで履歴外になった provenance、未追跡file、staged / unstagedを含むsource変更を
+表面化する。日時ベースの鮮度、文章の意味的真偽、許可source内に埋め込まれたsecretの検出は行わない。
+
+`.ai/local/knowledge/**` は distribution の固定保護pathであり、中央manifestからは書き込めない。
+`aro knowledge init` はこの保護を迂回するものではなく、必須の `--base <ref>` と HEAD の merge-base に
+ある `.ai/project.yaml` の許可を確認したうえで、固定された2fileだけをsymlink検査付きexclusive create
+する専用経路である。既存repoでは `--base origin/main` を指定し、同一PRの設定緩和を信用しない。
+
+CI のknowledge検証は中央checkoutのauthoritative schemaとcheckerを使い、LLM・network・secretを
+必要としない。baseに存在したindexをPRで削除してもskipせず、欠落としてfailする。
+
 ## distribution 名の検証
 
 `--distribution` は CLI から渡される untrusted な文字列であり、そのまま `path.join` すると `../...` で `distribution/` の外側を指せてしまう。`assertValidDistributionName` により、英数字・`.`・`_`・`-` のみで構成される単一セグメント（先頭ドット不可）だけを許可する。

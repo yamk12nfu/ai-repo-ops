@@ -29,6 +29,8 @@ const DISTRIBUTION_DIR = "distribution";
 const MANIFEST_FILENAME = "manifest.yaml";
 /** authoritative project schema（source root からの相対 path。計画 §0.1.5 / §17.4）。 */
 const PROJECT_SCHEMA_RELATIVE_PATH = "schemas/project.schema.json";
+/** authoritative knowledge index schema。 */
+const KNOWLEDGE_SCHEMA_RELATIVE_PATH = "schemas/knowledge.schema.json";
 
 /**
  * distribution 名として許可するパターン（単一 path セグメント）。
@@ -403,25 +405,49 @@ function manifestRelative(distribution: string): string {
  * @throws {SourceError} schema ファイルが無い（`PROJECT_SCHEMA_NOT_FOUND`）/
  *   JSON として parse できない（`PROJECT_SCHEMA_PARSE`）場合。
  */
-export async function loadProjectSchema(sourceRoot: string): Promise<unknown> {
-  const buffer = await readFileWithinRoot(sourceRoot, PROJECT_SCHEMA_RELATIVE_PATH, "schemas/project.schema.json");
+async function loadAuthoritativeJsonSchema(
+  sourceRoot: string,
+  relativePath: string,
+  label: string,
+  errorPrefix: "PROJECT_SCHEMA" | "KNOWLEDGE_SCHEMA",
+): Promise<unknown> {
+  const buffer = await readFileWithinRoot(sourceRoot, relativePath, label);
   if (buffer === null) {
     throw new SourceError(
-      "PROJECT_SCHEMA_NOT_FOUND",
-      `authoritative project schema が見つかりません: ${path.join(sourceRoot, PROJECT_SCHEMA_RELATIVE_PATH)}`,
-      { hint: `${PROJECT_SCHEMA_RELATIVE_PATH} を作成してください。` },
+      `${errorPrefix}_NOT_FOUND`,
+      `authoritative schema が見つかりません: ${path.join(sourceRoot, relativePath)}`,
+      { hint: `${relativePath} を作成してください。` },
     );
   }
-  assertUtf8Text(buffer, "schemas/project.schema.json", PROJECT_SCHEMA_RELATIVE_PATH);
+  assertUtf8Text(buffer, label, relativePath);
   try {
     // 先頭 UTF-8 BOM だけで JSON.parse が失敗しないよう、他の source ファイルと同じく canonicalize
     // してから parse する（§6.2。BOM 付き JSON は JSON.parse がそのまま SyntaxError を投げるため）。
     return JSON.parse(canonicalizeTextString(buffer.toString("utf8"))) as unknown;
   } catch (error) {
     throw new SourceError(
-      "PROJECT_SCHEMA_PARSE",
-      `authoritative project schema の JSON parse に失敗しました: ${PROJECT_SCHEMA_RELATIVE_PATH}`,
+      `${errorPrefix}_PARSE`,
+      `authoritative schema の JSON parse に失敗しました: ${relativePath}`,
       { hint: "JSON 構文を確認してください。", cause: error },
     );
   }
+}
+
+export async function loadProjectSchema(sourceRoot: string): Promise<unknown> {
+  return loadAuthoritativeJsonSchema(
+    sourceRoot,
+    PROJECT_SCHEMA_RELATIVE_PATH,
+    "schemas/project.schema.json",
+    "PROJECT_SCHEMA",
+  );
+}
+
+/** source root のauthoritative knowledge index schemaを読む。 */
+export async function loadKnowledgeSchema(sourceRoot: string): Promise<unknown> {
+  return loadAuthoritativeJsonSchema(
+    sourceRoot,
+    KNOWLEDGE_SCHEMA_RELATIVE_PATH,
+    "schemas/knowledge.schema.json",
+    "KNOWLEDGE_SCHEMA",
+  );
 }

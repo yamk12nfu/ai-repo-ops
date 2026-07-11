@@ -76,6 +76,13 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Prepare review artifacts directory
+        id: artifacts
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          artifacts_dir="$(mktemp -d "$RUNNER_TEMP/aro-review.XXXXXX")"
+          echo "dir=$artifacts_dir" >> "$GITHUB_OUTPUT"
+
       - name: Checkout guard engine (ai-repo-ops)
         if: steps.gate.outputs.skip != 'true'
         uses: actions/checkout@v4
@@ -108,30 +115,31 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         env:
           BASE_REF: ${{ github.base_ref }}
+          ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
         run: |
           set +e
           node .aro-engine/packages/aro-cli/dist/cli.js guard \
             --repo . --base "origin/$BASE_REF" --json \
-            > guard-result.json 2> guard-error.json
+            > "$ARTIFACTS_DIR/guard-result.json" 2> "$ARTIFACTS_DIR/guard-error.json"
           code=$?
           set -e
           echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           if [ "$code" -eq 3 ]; then
             # 検証不能（unexpected）のうち「base にルールが無い」は導入 PR 等の正常系
             # として skip 扱いにする（docs/guard.md「merge-base 側から読む」参照）
-            err_code="$(jq -r '.error.code // ""' guard-error.json 2>/dev/null || echo "")"
+            err_code="$(jq -r '.error.code // ""' "$ARTIFACTS_DIR/guard-error.json" 2>/dev/null || echo "")"
             echo "error_code=$err_code" >> "$GITHUB_OUTPUT"
             if [ "$err_code" = "PROJECT_CONFIG_NOT_FOUND" ] || [ "$err_code" = "POLICY_NOT_FOUND" ]; then
               echo "not_guardable=true" >> "$GITHUB_OUTPUT"
               exit 0
             fi
-            cat guard-error.json >&2
+            cat "$ARTIFACTS_DIR/guard-error.json" >&2
             exit 3
           fi
           if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
             # 仕様外の exit code（node の signal 死・CLI 起動失敗・将来の exit 2 等）は
             # 見逃さず即失敗に倒す（required check が誤って green になるのを防ぐ）
-            cat guard-error.json >&2 || true
+            cat "$ARTIFACTS_DIR/guard-error.json" >&2 || true
             exit "$code"
           fi
           if [ "$code" -eq 1 ]; then
@@ -141,9 +149,66 @@ jobs:
             jq -r '
               def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
               .report.violations[] | "| \(.kind|esc) | \((.path // "-")|esc) | \(.message|esc) |"
-            ' guard-result.json > guard-violations.md
+            ' "$ARTIFACTS_DIR/guard-result.json" > "$ARTIFACTS_DIR/guard-violations.md"
           fi
           # exit 0（違反なし）/ 1（違反あり）はここでは失敗にせず、summary 出力後に判定する
+          exit 0
+
+      - name: Run knowledge check
+        id: knowledge
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
+        run: |
+          INDEX_PATH=".ai/local/knowledge/index.yaml"
+          head_has_index=false
+          base_has_index=false
+          if [ -e "$INDEX_PATH" ] || [ -L "$INDEX_PATH" ]; then
+            head_has_index=true
+          fi
+          if git cat-file -e "origin/$BASE_REF:$INDEX_PATH" 2>/dev/null; then
+            base_has_index=true
+          fi
+          if [ "$head_has_index" = "false" ] && [ "$base_has_index" = "false" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "reason=HEADにもbaseにもknowledge indexが存在しない（未導入repo）" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          strict=false
+          if ! git diff --quiet "origin/$BASE_REF...HEAD" -- ".ai/local/knowledge/"; then
+            strict=true
+          fi
+          echo "strict=$strict" >> "$GITHUB_OUTPUT"
+
+          set +e
+          if [ "$strict" = "true" ]; then
+            node .aro-engine/packages/aro-cli/dist/cli.js knowledge check \
+              --repo . --source .aro-engine --strict --json \
+              > "$ARTIFACTS_DIR/knowledge-result.json" 2> "$ARTIFACTS_DIR/knowledge-error.json"
+          else
+            node .aro-engine/packages/aro-cli/dist/cli.js knowledge check \
+              --repo . --source .aro-engine --json \
+              > "$ARTIFACTS_DIR/knowledge-result.json" 2> "$ARTIFACTS_DIR/knowledge-error.json"
+          fi
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            cat "$ARTIFACTS_DIR/knowledge-error.json" >&2 || true
+            exit "$code"
+          fi
+
+          jq -r '
+            def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
+            .report.findings[]
+            | select(.status != "pass")
+            | "| \(.status|esc) | \((.entryId // "-")|esc) | \((.path // "-")|esc) | \(.message|esc) |"
+          ' "$ARTIFACTS_DIR/knowledge-result.json" > "$ARTIFACTS_DIR/knowledge-findings.md"
+          # exit 1（検証FAIL）はsummary出力後に専用stepでfailさせる。
           exit 0
 
       - name: Write step summary
@@ -155,6 +220,11 @@ jobs:
           NOT_GUARDABLE: ${{ steps.guard.outputs.not_guardable }}
           ERROR_CODE: ${{ steps.guard.outputs.error_code }}
           CONFIG_PATH: ${{ inputs.config_path }}
+          KNOWLEDGE_SKIP: ${{ steps.knowledge.outputs.skip }}
+          KNOWLEDGE_SKIP_REASON: ${{ steps.knowledge.outputs.reason }}
+          KNOWLEDGE_EXIT: ${{ steps.knowledge.outputs.exit_code }}
+          KNOWLEDGE_STRICT: ${{ steps.knowledge.outputs.strict }}
+          ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
         run: |
           {
             echo "## AI Review (aro guard)"
@@ -173,11 +243,40 @@ jobs:
               echo ""
               echo "| kind | path | 内容 |"
               echo "|---|---|---|"
-              cat guard-violations.md
+              cat "$ARTIFACTS_DIR/guard-violations.md"
             else
               echo "- 状態: **error**（guard exit: ${GUARD_EXIT:-unknown}）— job log を参照"
             fi
             echo "- config: \`$CONFIG_PATH\`"
+
+            echo ""
+            echo "## Repo Knowledge"
+            echo ""
+            if [ "$SKIP" = "true" ]; then
+              echo "- 状態: **skipped** — workflow自体がskip"
+            elif [ "$KNOWLEDGE_SKIP" = "true" ]; then
+              echo "- 状態: **skipped**"
+              echo "- 理由: $KNOWLEDGE_SKIP_REASON"
+            elif [ "$KNOWLEDGE_EXIT" = "0" ] || [ "$KNOWLEDGE_EXIT" = "1" ]; then
+              if [ "$KNOWLEDGE_EXIT" = "0" ]; then
+                echo "- 状態: **checked** — blocking failureなし"
+              else
+                echo "- 状態: **failures found** — このjobはfailする"
+              fi
+              echo "- strict: \`${KNOWLEDGE_STRICT:-false}\`"
+              echo "- entries: $(jq -r '.report.summary.entries' "$ARTIFACTS_DIR/knowledge-result.json")"
+              echo "- warnings: $(jq -r '.report.summary.warned' "$ARTIFACTS_DIR/knowledge-result.json")"
+              echo "- failures: $(jq -r '.report.summary.failed' "$ARTIFACTS_DIR/knowledge-result.json")"
+              echo "- stale: $(jq -r '.report.summary.stale' "$ARTIFACTS_DIR/knowledge-result.json")"
+              if [ -s "$ARTIFACTS_DIR/knowledge-findings.md" ]; then
+                echo ""
+                echo "| status | entry | path | 内容 |"
+                echo "|---|---|---|---|"
+                cat "$ARTIFACTS_DIR/knowledge-findings.md"
+              fi
+            else
+              echo "- 状態: **error**（knowledge exit: ${KNOWLEDGE_EXIT:-unknown}）— job logを参照"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Comment violations on PR
@@ -188,20 +287,27 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
         run: |
           {
             echo "## aro guard: policies 違反を検出しました"
             echo ""
             echo "| kind | path | 内容 |"
             echo "|---|---|---|"
-            cat guard-violations.md
+            cat "$ARTIFACTS_DIR/guard-violations.md"
             echo ""
             echo "検証ルールは base 側の \`.ai/project.yaml\` と適用 policy から読まれます（PR 内の変更では緩められません）。詳細: docs/guard.md"
-          } > guard-comment.md
-          gh pr comment "$PR_NUMBER" --body-file guard-comment.md
+          } > "$ARTIFACTS_DIR/guard-comment.md"
+          gh pr comment "$PR_NUMBER" --body-file "$ARTIFACTS_DIR/guard-comment.md"
 
       - name: Fail on violations
         if: steps.guard.outputs.exit_code == '1'
         run: |
           echo "aro guard が policies 違反を検出しました。詳細は step summary / PR コメントを参照してください。"
+          exit 1
+
+      - name: Fail on knowledge violations
+        if: steps.knowledge.outputs.exit_code == '1'
+        run: |
+          echo "aro knowledge check がblocking failureを検出しました。詳細はstep summaryを参照してください。"
           exit 1

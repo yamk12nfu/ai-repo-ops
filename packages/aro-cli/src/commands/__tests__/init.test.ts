@@ -257,11 +257,13 @@ describe("executeInit: 実 distribution/base に対するエンドツーエン�
       ".ai/managed/prompts/review.md",
       ".ai/managed/prompts/improve.md",
       ".ai/managed/prompts/issue-fix.md",
+      ".ai/managed/prompts/knowledge-refresh.md",
       ".ai/managed/prompts/release-check.md",
       ".ai/managed/policies/default.yaml",
       ".ai/managed/policies/low-risk.yaml",
       ".ai/managed/policies/security.yaml",
       ".ai/managed/schemas/project.schema.json",
+      ".ai/managed/schemas/knowledge.schema.json",
       ".ai/project.yaml",
       ".github/workflows/ai-review.yml",
       ".gitignore",
@@ -279,9 +281,9 @@ describe("executeInit: 実 distribution/base に対するエンドツーエン�
     expect(await read(".prettierignore")).toContain(".ai/managed/");
     expect(await read(".prettierignore")).toContain(".ai/ai-repo-ops.lock.yaml");
 
-    // lock に 8 件の managed file が記録される。
+    // lock に 10 件の managed file が記録される。
     const lock = parseLockFile(await read(LOCKFILE_RELATIVE_PATH));
-    expect(lock.managed_files).toHaveLength(8);
+    expect(lock.managed_files).toHaveLength(10);
 
     // init 直後の diff は up to date。
     const diffCap = { out: [] as string[], err: [] as string[] };

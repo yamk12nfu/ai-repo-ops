@@ -89,3 +89,14 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
   違反一覧が step summary と PR コメントに出る。guard は AI レビューと違い「PR を block する」
   検証なので、required check にしてよい。base に検証ルールが無い場合（導入 PR 等）は
   明示 skip で workflow は成功する。
+
+同じ reusable workflow は、Repo Knowledge を導入済みの repo では `aro knowledge check` も実行する。
+knowledge pathを変更しないPRは通常モード、`.ai/local/knowledge/**`を変更するPRはstrictモードで検証し、
+結果を同じstep summaryへ出す。HEADとbaseのどちらにもindexが無いrepoだけをskipするため、既存indexを
+PRで削除して検査を無効化することはできない。詳細は
+[`repo-knowledge-loop.md`](./repo-knowledge-loop.md) を参照。
+
+既存repoでknowledgeの書き込み範囲を追加する場合、`.ai/project.yaml`変更は従来どおり
+`project_config` violationになる。設定専用PRを人間が確認・overrideして先にmergeし、次のPRから
+`aro knowledge init --base origin/main`とknowledge更新を行う。同一PR内の設定緩和はinitの許可判定にも
+使われない。

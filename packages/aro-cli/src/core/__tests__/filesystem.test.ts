@@ -11,6 +11,7 @@ import {
   canonicalSha256OfFile,
   readFileIfExists,
   writeTextFileLf,
+  writeTextFileExclusiveWithinRoot,
   writeTextFileWithinRoot,
 } from "../filesystem.js";
 
@@ -127,6 +128,38 @@ describe("writeTextFileWithinRoot", () => {
       ).rejects.toBeInstanceOf(PathSafetyError);
       // 外部ディレクトリにファイルは作られていない。
       expect(await readFileIfExists(path.join(outside, "escape.md"))).toBeNull();
+    } finally {
+      await rm(outside, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("writeTextFileExclusiveWithinRoot", () => {
+  it("存在しないroot配下pathをLF正規化して作成する", async () => {
+    const absolute = await writeTextFileExclusiveWithinRoot(workDir, "local/new.md", "a\r\nb\r\n");
+    expect(absolute).toBe(path.join(workDir, "local", "new.md"));
+    expect(await readFile(absolute, "utf8")).toBe("a\nb\n");
+  });
+
+  it("既存ファイルを上書きせずEEXISTにする", async () => {
+    const absolute = path.join(workDir, "local", "existing.md");
+    await mkdir(path.dirname(absolute), { recursive: true });
+    await writeFile(absolute, "original\n");
+
+    await expect(
+      writeTextFileExclusiveWithinRoot(workDir, "local/existing.md", "replacement\n"),
+    ).rejects.toMatchObject({ code: "EEXIST" });
+    expect(await readFile(absolute, "utf8")).toBe("original\n");
+  });
+
+  it("symlink経由の作成を拒否する", async () => {
+    const outside = await mkdtemp(path.join(tmpdir(), "aro-exclusive-outside-"));
+    try {
+      await symlink(outside, path.join(workDir, "link"), "dir");
+      await expect(
+        writeTextFileExclusiveWithinRoot(workDir, "link/new.md", "secret\n"),
+      ).rejects.toBeInstanceOf(PathSafetyError);
+      expect(await readFileIfExists(path.join(outside, "new.md"))).toBeNull();
     } finally {
       await rm(outside, { recursive: true, force: true });
     }

@@ -12,9 +12,11 @@ distribution/
     files/
       .ai/
         managed/
-          prompts/*.md
+          prompts/*.md                      # knowledge-refresh.mdを含む
           policies/*.yaml
-          schemas/project.schema.json   # authoritative schema のコピー（後述）
+          schemas/
+            project.schema.json             # authoritative schema のコピー（後述）
+            knowledge.schema.json
       .github/
         workflows/
           ai-review.yml
@@ -124,16 +126,35 @@ files[].dest / seed_files[].dest / patches[].path は全体で一意（大文字
 
 `src` / `template` で参照するファイルは UTF-8 テキストとして読める必要がある（不正なバイト列は `SOURCE_FILE_NOT_UTF8` エラー。binary は MVP 非対応）。
 
-## authoritative schema と managed copy
+## authoritative schemas と managed copies
 
-`.ai/project.yaml` の検証に使う JSON Schema は `schemas/project.schema.json` を唯一の正（authoritative）とする。`distribution/base/files/.ai/managed/schemas/project.schema.json` はこの authoritative schema から生成した配布用コピーで、対象 repo 内でのエディタ補完・可視性のためだけに存在する。
+`.ai/project.yaml` と `.ai/local/knowledge/index.yaml` の JSON Schema は、それぞれ
+`schemas/project.schema.json` と `schemas/knowledge.schema.json` を唯一の正（authoritative）とする。
+`distribution/base/files/.ai/managed/schemas/` の同名ファイルは、対象 repo 内でのエディタ補完・可視性の
+ためだけに存在する配布用コピーである。
 
 ```bash
-pnpm schema:sync    # authoritative -> managed copy へ同期（生成/上書き）
-pnpm schema:check   # 差分があれば exit 1（CI 向け）
+pnpm schema:sync    # 2つのauthoritative schema -> managed copies
+pnpm schema:check   # どちらかに差分があれば exit 1（CI 向け）
 ```
 
-2 箇所を人間が手で編集する運用は禁止する。`aro doctor` の `.ai/project.yaml` 検証は常に `schemas/project.schema.json`（ai-repo-ops source 側）を読む。対象 repo 側の managed copy が改変されていても検証の信頼性は落ちない（copy 自体は managed file の checksum 検証で drift 検出される）。
+authoritative と copy の両方を人間が手で編集する運用は禁止する。`aro doctor` と
+`aro knowledge check` は常に ai-repo-ops source 側の authoritative schema を読む。対象 repo 側の
+managed copy が改変されても検証の信頼性は落ちない（copy 自体は managed file の checksum 検証で
+drift 検出される）。
+
+## `.ai/local/knowledge/**` の所有境界
+
+`.ai/local/**` は常時保護 path のため、distribution manifest の `files[]` / `seed_files[]` /
+`patches[]` は一切書き込めない。Repo Knowledge Loop が中央管理するのは次の2点だけである。
+
+- `.ai/managed/prompts/knowledge-refresh.md`: ローカルAI向け更新手順。
+- `.ai/managed/schemas/knowledge.schema.json`: indexのエディタ向けcopy。
+
+対象 repo 所有の `.ai/local/knowledge/index.yaml` と Markdown は専用の `aro knowledge init` だけが作成し、
+`aro sync` は以後も触れない。`knowledge init` は distribution の例外ではなく、必須 `--base` と HEAD の
+merge-baseにある `.ai/project.yaml` による許可、symlink検査、exclusive createを備えた別の明示的経路である。詳細は
+[`repo-knowledge-loop.md`](./repo-knowledge-loop.md) を参照。
 
 ## distribution content hash
 

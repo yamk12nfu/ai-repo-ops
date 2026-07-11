@@ -76,6 +76,20 @@ CI への書き込み権限の追加は一切不要。
 - **人間の関与が前提**: 起動・PR 作成・merge のすべてに開発者の判断が挟まる。CI cron のような
   無人実行はしない（改善の質が低い場合に無意味な PR が量産されるリスクも、人間が起動する分だけ低い）。
 
+## Repo Knowledge Loop との関係
+
+この文書の `improve.md` ループは、source codeや設定の改善を1件実施するためのもの。repo固有の索引・
+要約だけを更新する場合は、別の `.ai/managed/prompts/knowledge-refresh.md` を使う。
+
+```txt
+.ai/managed/prompts/knowledge-refresh.md を読み、Repo Knowledge を1単位だけ更新して
+```
+
+knowledge更新は `.ai/local/knowledge/**` だけを編集し、`aro knowledge check --strict` で根拠と鮮度を
+検証する。source codeを変更する改善と同じPRへ混ぜず、source変更を先にcommitした後、そのHEADを根拠に
+小さなknowledge更新を作る。形式・導入手順・安全境界は
+[`repo-knowledge-loop.md`](./repo-knowledge-loop.md) を参照。
+
 ## トラブルシューティング
 
 | 症状 | 対処 |

@@ -15,6 +15,10 @@ files:
     dest: .ai/managed/prompts/issue-fix.md
     strategy: managed_overwrite
 
+  - src: files/.ai/managed/prompts/knowledge-refresh.md
+    dest: .ai/managed/prompts/knowledge-refresh.md
+    strategy: managed_overwrite
+
   - src: files/.ai/managed/prompts/release-check.md
     dest: .ai/managed/prompts/release-check.md
     strategy: managed_overwrite
@@ -33,6 +37,10 @@ files:
 
   - src: files/.ai/managed/schemas/project.schema.json
     dest: .ai/managed/schemas/project.schema.json
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/schemas/knowledge.schema.json
+    dest: .ai/managed/schemas/knowledge.schema.json
     strategy: managed_overwrite
 
 seed_files:
@@ -59,6 +67,7 @@ patches:
       - ".ai/managed/** text eol=lf"
       - ".ai/project.yaml text eol=lf"
       - ".ai/ai-repo-ops.lock.yaml text eol=lf"
+      - ".ai/local/knowledge/** text eol=lf"
       - ".github/workflows/ai-*.yml text eol=lf"
 
   - type: append_unique_lines
