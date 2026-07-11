@@ -53,7 +53,7 @@ jobs:
       # 投稿は失敗しうるが、continue-on-error で無視する。判定は job の成否で伝わる）
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # merge-base の解決と base...HEAD の diff に全履歴が必要
           fetch-depth: 0
@@ -85,7 +85,7 @@ jobs:
 
       - name: Checkout guard engine (ai-repo-ops)
         if: steps.gate.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           # この reusable workflow 自身と同じ repo・同じ commit の CLI を使う（workflow と
           # エンジンのバージョン一致を保証）。job.workflow_repository / job.workflow_sha は
@@ -97,10 +97,11 @@ jobs:
           path: .aro-engine
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.gate.outputs.skip != 'true'
         with:
-          node-version: 20
+          node-version: 24
+          package-manager-cache: false
 
       - name: Build aro CLI
         if: steps.gate.outputs.skip != 'true'

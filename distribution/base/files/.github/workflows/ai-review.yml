@@ -15,7 +15,7 @@ jobs:
       config_path: ".ai/project.yaml"
       lock_path: ".ai/ai-repo-ops.lock.yaml"
     # secrets: inherit は使わない（明示的な受け渡しのみ許可する方針）。
-    # ANTHROPIC_API_KEY は対象 repo の Actions secrets に登録する。
-    # 未登録・fork PR の場合、AI レビューは明示的に skip される（workflow は成功する）。
+    # anthropic_api_key は旧AIエンジンとの互換性契約として明示的に渡す。
+    # 現行 guard はこの secret を使用しないため、未登録でも動作に影響しない。
     secrets:
       anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
