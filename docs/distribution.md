@@ -18,7 +18,6 @@ distribution/
       .github/
         workflows/
           ai-review.yml
-          ai-improve.yml
 ```
 
 `--distribution` オプション（デフォルト `base`）で `distribution/<name>/` を選択する。distribution 名は単一セグメントで、先頭は英数字・`_`・`-` のいずれか（先頭ドットは不可）、2 文字目以降は英数字・`.`・`_`・`-` を許可する（`assertValidDistributionName`）。`manifest.yaml` の `name` フィールドとディレクトリ名は一致していなければならない（不一致は `DISTRIBUTION_NAME_MISMATCH` エラー）。
@@ -77,6 +76,15 @@ MVP の strategy は 3 つのみ。挙動の詳細（conflict 判定含む）は
 - `src` と `template` はどちらか一方だけを持たなければならない（両方あり／両方なしは validation error）。
   - `template`: Handlebars 的な `{{ repo_name }}` プレースホルダを repo 名で置換してから書き込む（`packages/aro-cli/src/core/template.ts`）。プレースホルダ以外の内容はそのまま。
   - `src`: プレースホルダ置換なしでそのまま書き込む（workflow stub など）。
+
+#### 配布終了した seed file の扱い
+
+`create_only` の seed を manifest から外しても、**既に seed 済みの repo からは消えない**
+（sync はファイルに触らず、lock の `seed_files` から当該エントリが外れるだけ）。撤去は手動で行う。
+
+- `.github/workflows/ai-improve.yml`（計画 03 Stage 2-2 で配布終了）: CI 内で AI 改善を実行しない
+  方針になったため、残っている repo では `git rm .github/workflows/ai-improve.yml` で削除して PR を
+  出す。残置は `aro doctor` が WARN（`workflow.ai-improve.legacy`）として検出する。
 
 ### `append_unique_lines`（`patches[]`）
 

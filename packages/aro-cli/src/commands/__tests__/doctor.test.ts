@@ -162,8 +162,8 @@ describe("executeDoctor: 実 distribution/base に対するエンドツーエン
     expect(cap.out()).toContain("project schema is valid using source schema");
     expect(cap.out()).toContain("managed file checksums are valid");
     expect(cap.out()).not.toContain("FAIL");
-    // ai-improve は contents:write を持つため WARN（想定どおり）。
-    expect(cap.out()).toContain("This is expected for improve mode");
+    // ai-improve は配布終了（計画 03 Stage 2-2）。新規 init 後の doctor に ai-improve 関連の出力は無い。
+    expect(cap.out()).not.toContain("ai-improve");
     expect(cap.out()).toContain("Summary:");
   });
 });

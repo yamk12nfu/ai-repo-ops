@@ -1,3 +1,10 @@
+# 互換性のためだけに残している legacy stub（計画 03 Stage 2-2）。
+#
+# CI 内で AI 改善は実行しない方針（改善ループは開発者のローカル環境で回す。
+# docs/local-improve-loop.md 参照）のため、呼び出し側 ai-improve.yml は配布物から
+# 除去済み。この reusable workflow は、除去前に seed された既存 repo の
+# `uses: ...@v1` 参照が workflow 解決エラーで赤くならないためだけに残している。
+# inputs は互換性契約として凍結（RELEASE.md §1）。書き込み権限は持たない。
 name: Reusable AI Improve
 
 on:
@@ -19,19 +26,13 @@ jobs:
   improve:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
+      contents: read
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Print AI improve context
+      - name: Deprecated notice
         run: |
-          echo "AI Improve stub"
+          echo "::notice::ai-improve is deprecated: AI improvement runs locally, not in CI."
+          echo "This workflow is a no-op kept for compatibility with already-seeded repos."
+          echo "Remove .github/workflows/ai-improve.yml from this repo (see aro doctor)."
           echo "config_path=${{ inputs.config_path }}"
           echo "lock_path=${{ inputs.lock_path }}"
           echo "mode=${{ inputs.mode }}"
-
-      - name: Validate config presence
-        run: |
-          test -f "${{ inputs.config_path }}"

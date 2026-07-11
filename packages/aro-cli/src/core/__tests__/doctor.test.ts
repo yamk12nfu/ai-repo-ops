@@ -409,6 +409,72 @@ describe("runDoctor: append_unique_lines patch（.gitignore / .gitattributes / .
   });
 });
 
+describe("runDoctor: distribution content drift（§10.5）", () => {
+  it("lock の content sha が source と一致していれば PASS", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist);
+
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+    expect(findCheck(report, "distribution.content")?.status).toBe("pass");
+    expect(findCheck(report, "distribution.content-drift")).toBeUndefined();
+  });
+
+  it("seed の配布終了のように実ファイル差分の無い配布変更でも、lock 更新が必要なら WARN", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    const dist1 = await loadDistribution(sourceRoot, "base");
+    await seedRepoAsSynced(repoRoot, dist1);
+
+    // workflow seed を配布終了した manifest へ差し替える（managed files / patches は不変）。
+    await writeRaw(
+      sourceRoot,
+      "distribution/base/manifest.yaml",
+      `schema_version: 1
+name: base
+version: 0.1.1
+files:
+  - src: files/.ai/managed/prompts/review.md
+    dest: .ai/managed/prompts/review.md
+    strategy: managed_overwrite
+  - src: files/.ai/managed/policies/default.yaml
+    dest: .ai/managed/policies/default.yaml
+    strategy: managed_overwrite
+seed_files:
+  - dest: .ai/project.yaml
+    template: project.yaml.hbs
+    strategy: create_only
+patches:
+  - type: append_unique_lines
+    path: .gitignore
+    lines:
+      - .ai/runs/
+      - .ai/tmp/
+      - .ai/logs/
+  - type: append_unique_lines
+    path: .gitattributes
+    lines:
+      - "# ai-repo-ops managed text files"
+      - ".ai/managed/** text eol=lf"
+preserve:
+  - .ai/project.yaml
+  - .ai/local/**
+`,
+    );
+    const dist2 = await loadDistribution(sourceRoot, "base");
+
+    const report = await runDoctor({ repoRoot, distribution: dist2, projectSchema: PROJECT_SCHEMA });
+
+    // 実ファイルはすべて最新のまま（managed checksum は PASS）だが、lock は古い。
+    expect(findCheck(report, "managed.checksums")?.status).toBe("pass");
+    const drift = findCheck(report, "distribution.content-drift");
+    expect(drift?.status).toBe("warn");
+    expect(drift?.hint).toContain("aro sync");
+    expect(findCheck(report, "distribution.content")).toBeUndefined();
+  });
+});
+
 describe("runDoctor: GitHub Actions workflow", () => {
   it("workflow が無ければ FAIL", async () => {
     await setupBaseDistribution(sourceRoot);
@@ -417,7 +483,8 @@ describe("runDoctor: GitHub Actions workflow", () => {
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
 
     expect(findCheck(report, "workflow.ai-review.exists")?.status).toBe("fail");
-    expect(findCheck(report, "workflow.ai-improve.exists")?.status).toBe("fail");
+    // ai-improve は配布終了（計画 03 Stage 2-2）。存在しないのが正常なのでチェック自体が出ない。
+    expect(findCheck(report, "workflow.ai-improve.legacy")).toBeUndefined();
   });
 
   it("reusable workflow を呼んでいなければ FAIL", async () => {
@@ -581,7 +648,7 @@ jobs:
     expect(findCheck(report, "workflow.ai-review.permissions")?.status).toBe("fail");
   });
 
-  it("ai-improve workflow の contents:write は WARN（改善モードのため許容・branch protection の注意喚起）", async () => {
+  it("legacy ai-improve workflow が残っていれば WARN（手動削除を案内。個別チェックは出さない）", async () => {
     await setupBaseDistribution(sourceRoot);
     await initGitRepo(repoRoot);
     await writeRaw(
@@ -601,9 +668,12 @@ jobs:
     const dist = await loadDistribution(sourceRoot, "base");
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
 
-    const check = findCheck(report, "workflow.ai-improve.permissions");
+    const check = findCheck(report, "workflow.ai-improve.legacy");
     expect(check?.status).toBe("warn");
-    expect(check?.hint).toContain("branch protection");
+    expect(check?.hint).toContain("git rm");
+    // legacy 扱いのため exists / reusable-call / permissions の個別チェックは出さない。
+    expect(findCheck(report, "workflow.ai-improve.exists")).toBeUndefined();
+    expect(findCheck(report, "workflow.ai-improve.permissions")).toBeUndefined();
   });
 
   it("permissions: write-all（scalar shorthand）も contents:write 相当として検出する", async () => {
@@ -683,24 +753,10 @@ jobs:
     uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml@v1
 `,
     );
-    await writeRaw(
-      repoRoot,
-      ".github/workflows/ai-improve.yml",
-      `name: AI Improve
-on:
-  workflow_dispatch: {}
-permissions:
-  contents: write
-jobs:
-  ai_improve:
-    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-improve.reusable.yml@v1
-`,
-    );
-
     const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
     expect(report.summary.failed).toBe(0);
     expect(report.hasFailures).toBe(false);
-    // ai-improve の contents:write と test コマンド空文字で WARN が出る。
+    // test コマンド空文字で WARN が出る。
     expect(report.summary.warned).toBeGreaterThan(0);
   });
 });

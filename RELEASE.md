@@ -23,8 +23,9 @@ AI）でもリリース作業を再現できることを目的とする。前提
 - **`vX.Y.Z`**: semver に従う**不変**タグ。リリースのたびに新しい commit へ新しく発行する。一度発行した
   `vX.Y.Z` は再利用・移動しない。
 - **`v1`**: major 1 系の**moving tag**。`distribution/base/files/.github/workflows/*.yml` が参照する
-  reusable workflow（`.github/workflows/ai-review.reusable.yml` / `ai-improve.reusable.yml`）の互換ラインを
-  指す。互換性を壊さないマイナー・パッチリリースのたびに、最新の `vX.Y.Z` と同じ commit へ**付け替える**。
+  reusable workflow（`.github/workflows/ai-review.reusable.yml`。`ai-improve.reusable.yml` は配布終了済みの
+  legacy 呼び出し側向け互換 stub としてのみ残る）の互換ラインを指す。互換性を壊さないマイナー・パッチ
+  リリースのたびに、最新の `vX.Y.Z` と同じ commit へ**付け替える**。
 
   ```bash
   git tag -f v1 <release-sha>
@@ -34,12 +35,12 @@ AI）でもリリース作業を再現できることを目的とする。前提
 - **`v2` への切り上げ**: 次のいずれかに該当する変更（reusable workflow の破壊的変更）を行う場合は、
   `v1` を付け替えず新たに `v2` を切る。
   - reusable workflow（`ai-review.reusable.yml` / `ai-improve.reusable.yml`）の `on.workflow_call.inputs`
-    の削除・必須化・型変更など、既存の呼び出し側（配布済み `ai-review.yml` / `ai-improve.yml`）が
-    そのままでは動かなくなる変更
+    の削除・必須化・型変更など、既存の呼び出し側（配布済み `ai-review.yml`、および配布終了前に
+    seed された `ai-improve.yml`）がそのままでは動かなくなる変更
   - distribution の互換性を壊す変更（`aro doctor` が要求するファイル形式・permission 要件の
     後方非互換な変更など）
-  - `v2` を切ったら、`distribution/base/files/.github/workflows/ai-review.yml` /
-    `ai-improve.yml` 内の `uses: .../ai-review.reusable.yml@v1` を `@v2` に書き換え、通常のリリース
+  - `v2` を切ったら、`distribution/base/files/.github/workflows/ai-review.yml` 内の
+    `uses: .../ai-review.reusable.yml@v1` を `@v2` に書き換え、通常のリリース
     （本手順）で配布し、対象 repo は `aro sync` を実行することで新しい参照へ追従する。
   - 移行期間中は `v1` と `v2` の reusable workflow 実体を両方 main 上に残し、`v1` 系を参照している
     既存の対象 repo が壊れないようにする。
@@ -207,12 +208,11 @@ pnpm release:check
 
 - `--pre-tag` を付けずに実行する（§5 と異なり、この時点では `vX.Y.Z` / moving tag が発行済み）。
 - 検証内容: §5 の a〜c（version 整合・CHANGELOG）に加え、`vX.Y.Z` タグが origin に存在すること、
-  および配布中の `ai-review.yml` / `ai-improve.yml` が参照する moving tag（通常 `v1`）が origin の
+  および配布中の `ai-review.yml` が参照する moving tag（通常 `v1`）が origin の
   `vX.Y.Z` と同じ commit を指すこと。1 つでも FAIL があれば、moving tag の付け替え漏れ等
   §6 の手順に戻って修正する（`git ls-remote --tags origin` で生の tag 一覧も直接確認できる）。
-- 可能であれば、`aro init` 済みの実 repo で PR を作成し `AI Review` workflow が緑で完了すること、
-  および `AI Improve` workflow を `workflow_dispatch` から起動して緑で完了することを確認する
-  （中身は stub の echo のままでよい。動くこと自体の確認）。
+- 可能であれば、`aro init` 済みの実 repo で PR を作成し `AI Review` workflow が緑で完了することを
+  確認する（動くこと自体の確認）。
 
 ### GitHub Releases は発行しない（決定事項）
 
@@ -233,7 +233,7 @@ pnpm release:check
     は §0 の 2 層契約により別軸のため、semver として妥当かのみ確認し一致は求めない）
   - `CHANGELOG.md` に該当 version のセクションが存在すること
   - `vX.Y.Z` タグが origin に存在すること
-  - 配布中の `ai-review.yml` / `ai-improve.yml` が参照する moving tag（通常 `v1`）が、期待する commit
+  - 配布中の `ai-review.yml` が参照する moving tag（通常 `v1`）が、期待する commit
     （＝最新の `vX.Y.Z` タグと同じ commit）を指していること
 - **GitHub Releases の発行有無**: `v0.1.0` はタグのみで発行し GitHub Releases は作らないと決定済み
   （§7）。以降のリリースでリリースノート公開が必要になれば再検討する。

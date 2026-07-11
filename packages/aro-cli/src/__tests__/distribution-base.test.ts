@@ -193,9 +193,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       expect(file.sourceSha256).toMatch(/^[0-9a-f]{64}$/);
     }
 
-    // seed files: project.yaml（template）+ workflow stub 2 件。
+    // seed files: project.yaml（template）+ workflow stub 1 件（ai-improve は配布終了。計画 03 Stage 2-2）。
     expect(loaded.seedFiles.map((seed) => seed.dest).sort()).toEqual(
-      [".ai/project.yaml", ".github/workflows/ai-improve.yml", ".github/workflows/ai-review.yml"].sort(),
+      [".ai/project.yaml", ".github/workflows/ai-review.yml"].sort(),
     );
     const projectSeed = loaded.seedFiles.find((seed) => seed.dest === ".ai/project.yaml");
     expect(projectSeed?.sourceKind).toBe("template");
