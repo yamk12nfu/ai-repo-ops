@@ -256,6 +256,7 @@ async function checkSource(
         path: sourcePath,
       }),
     );
+    return;
   } else if (!isRegularKnowledgeSourceEntry(state.verifiedEntry)) {
     findings.push(
       fail(
@@ -354,12 +355,11 @@ export async function runKnowledgeCheck(input: RunKnowledgeCheckInput): Promise<
     );
     return finalizeReport(repoRoot, input.strict, 0, findings);
   }
-  findings.push(pass("index.exists", `knowledge indexが存在します: ${KNOWLEDGE_INDEX_PATH}`, { path: KNOWLEDGE_INDEX_PATH }));
-
   if (indexRead.kind === "not-text") {
     findings.push(fail("index.text", "knowledge indexがUTF-8テキストではありません。", { path: KNOWLEDGE_INDEX_PATH }));
     return finalizeReport(repoRoot, input.strict, 0, findings);
   }
+  findings.push(pass("index.exists", `knowledge indexが存在します: ${KNOWLEDGE_INDEX_PATH}`, { path: KNOWLEDGE_INDEX_PATH }));
   let rawIndex: unknown;
   try {
     rawIndex = parseYaml(indexRead.text);

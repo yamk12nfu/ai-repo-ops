@@ -88,6 +88,7 @@ describe("executeKnowledgeCheck", () => {
     expect(code).toBe(KNOWLEDGE_CHECK_EXIT.ok);
     expect(cap.out()).toContain("ai-repo-ops knowledge check");
     expect(cap.out()).toContain("PASS");
+    expect(cap.out()).toContain("0 warnings");
     expect(cap.err()).toBe("");
   });
 

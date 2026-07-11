@@ -195,19 +195,29 @@ jobs:
           fi
           code=$?
           set -e
-          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
 
           if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
-            cat "$ARTIFACTS_DIR/knowledge-error.json" >&2 || true
+            echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+            if [ -s "$ARTIFACTS_DIR/knowledge-error.json" ]; then
+              cat "$ARTIFACTS_DIR/knowledge-error.json" >&2
+            else
+              echo "knowledge checkが予期しない終了コード $code で失敗しました。" >&2
+            fi
             exit "$code"
           fi
 
-          jq -r '
+          if ! jq -r '
             def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
             .report.findings[]
             | select(.status != "pass")
             | "| \(.status|esc) | \((.entryId // "-")|esc) | \((.path // "-")|esc) | \(.message|esc) |"
-          ' "$ARTIFACTS_DIR/knowledge-result.json" > "$ARTIFACTS_DIR/knowledge-findings.md"
+          ' "$ARTIFACTS_DIR/knowledge-result.json" > "$ARTIFACTS_DIR/knowledge-findings.md"; then
+            echo "knowledge checkのJSON結果を処理できませんでした。" >&2
+            echo "exit_code=3" >> "$GITHUB_OUTPUT"
+            exit 3
+          fi
+
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
           # exit 1（検証FAIL）はsummary出力後に専用stepでfailさせる。
           exit 0
 

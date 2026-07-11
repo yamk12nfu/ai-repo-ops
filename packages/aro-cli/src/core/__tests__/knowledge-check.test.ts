@@ -106,6 +106,15 @@ describe("runKnowledgeCheck", () => {
     expect(finding(report, "index.exists")?.hint).toContain("--base");
   });
 
+  it("UTF-8テキストでないindexはindex.textだけをFAILにする", async () => {
+    await writeRawBytes(repoRoot, KNOWLEDGE_INDEX_PATH, Buffer.from([0xff, 0xfe, 0xfd]));
+
+    const report = await runKnowledgeCheck({ repoRoot, knowledgeSchema, strict: false });
+
+    expect(finding(report, "index.text")?.status).toBe("fail");
+    expect(finding(report, "index.exists")).toBeUndefined();
+  });
+
   it("authoritative schema違反をreport内のFAILにする", async () => {
     await writeRaw(repoRoot, KNOWLEDGE_INDEX_PATH, "schema_version: 1\nentries: []\nunexpected: true\n");
 
@@ -178,6 +187,7 @@ entries:
     const report = await runKnowledgeCheck({ repoRoot, knowledgeSchema, strict: false });
 
     expect(finding(report, "provenance.source-at-commit")?.status).toBe("fail");
+    expect(finding(report, "source.stale")).toBeUndefined();
   });
 
   it("HEADと別系統のverification commitをprovenance FAILにする", async () => {

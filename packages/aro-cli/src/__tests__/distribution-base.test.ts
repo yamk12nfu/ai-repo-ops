@@ -304,6 +304,27 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     }
   });
 
+  it("knowledge結果JSONの変換失敗をexit 3としてfail-closedにする", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+    const start = workflow.indexOf("      - name: Run knowledge check");
+    const end = workflow.indexOf("      - name: Write step summary", start);
+    const step = workflow.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(step).toContain("if ! jq -r '");
+    expect(step).toContain('echo "knowledge checkのJSON結果を処理できませんでした。" >&2');
+    expect(step).toContain('echo "exit_code=3" >> "$GITHUB_OUTPUT"');
+    expect(step).toContain("exit 3");
+
+    const unexpectedCodeOutput = step.indexOf('echo "exit_code=$code" >> "$GITHUB_OUTPUT"');
+    const jsonConversion = step.indexOf("if ! jq -r '");
+    const successfulCodeOutput = step.lastIndexOf('echo "exit_code=$code" >> "$GITHUB_OUTPUT"');
+    expect(unexpectedCodeOutput).toBeGreaterThanOrEqual(0);
+    expect(unexpectedCodeOutput).toBeLessThan(jsonConversion);
+    expect(successfulCodeOutput).toBeGreaterThan(jsonConversion);
+  });
+
   it("tarball smokeがknowledgeサブコマンドとHEAD設定境界を検証する", async () => {
     const workflow = await readFile(CI_WORKFLOW, "utf8");
     expect(workflow).toContain("aro knowledge --help");

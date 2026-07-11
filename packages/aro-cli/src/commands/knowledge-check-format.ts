@@ -40,7 +40,7 @@ export function formatKnowledgeCheckHuman(
   lines.push(palette.heading("Summary:"));
   lines.push(`  ${report.summary.entries} entries`);
   lines.push(`  ${report.summary.passed} passed`);
-  lines.push(`  ${report.summary.warned} warning`);
+  lines.push(`  ${report.summary.warned} warnings`);
   lines.push(`  ${report.summary.failed} failed`);
   lines.push(`  ${report.summary.stale} stale`);
   return lines.join("\n");

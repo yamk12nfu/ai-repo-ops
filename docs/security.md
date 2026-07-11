@@ -109,15 +109,13 @@ CI のknowledge検証は中央checkoutのauthoritative schemaとcheckerを使い
 permissions:
   contents: read
   pull-requests: write
-  issues: write
-  id-token: write
 ```
 
 `ai-review` workflow は `contents: write` を持つべきではない（`aro doctor` が top-level / job 単位いずれの permissions でも `contents: write` あるいは `write-all` を検出すると **FAIL** にする）。
 
 > **方向転換の実施（2026-07-07・計画 03 Stage 2-2）**: `ai-improve` workflow（cron + `contents: write` を持つ「CI 内で AI が改善 PR を自動作成する」旧設計）は**配布物から除去した**。改善ループは開発者のローカル環境で回す（[計画 03](./plans/03-guard-and-improve-loop.md) / [`docs/local-improve-loop.md`](./local-improve-loop.md) 参照）。`ai-improve.reusable.yml` は、除去前に seed された既存 repo の `@v1` 参照が workflow 解決エラーにならないための **no-op stub**（`contents: read` のみ・checkout もしない）としてのみ残す。既存 repo に残る配布済み `ai-improve.yml` は `create_only` のため `aro sync` では消えず、`aro doctor` が **WARN** で手動削除（`git rm .github/workflows/ai-improve.yml`）を案内する。
 
-`id-token: write` は旧エンジン（`claude-code-action`）の既定認証（OIDC）向けに配布側 `ai-review.yml` に付与していたもの。guard エンジンへの差し替え（計画 03 Stage 1-2）後の reusable workflow は要求しない（callee が要求しない permission は caller にあっても使われないため、配布済み repo に残っていても無害）。`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
+`id-token: write` は旧エンジン（`claude-code-action`）の既定認証（OIDC）向けに、過去の配布側 `ai-review.yml` に付与していたもの。guard エンジンへの差し替え（計画 03 Stage 1-2）後の reusable workflow は要求しない（callee が要求しない permission は caller にあっても使われないため、配布済み repo に残っていても無害）。`aro doctor` の permissions チェックは `contents` の値（および `write-all` shorthand）のみを見るため、`id-token: write` の有無は PASS/WARN/FAIL の判定に影響しない。
 
 `aro doctor` は次も検査する。
 
