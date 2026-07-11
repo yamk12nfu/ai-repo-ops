@@ -5,9 +5,10 @@
 > CI で従量課金 API キーの AI を動かす方式・secrets を repo ごとに配る運用・自前レビュー基盤は
 > 採らない方針が確定した（経緯は [計画 02 の注記](./plans/02-ai-review-commenter.md)）。
 > `ANTHROPIC_API_KEY` の登録による dogfooding は**行わない**。
-> API キー未登録なら明示 skip + workflow 成功のため、配布済み repo に害はない。
-> **すでに `ANTHROPIC_API_KEY` を登録した repo がある場合は、課金防止のため secret の削除
-> （`gh secret delete ANTHROPIC_API_KEY --repo <owner>/<repo>`）または workflow の無効化を検討する。**
+> 現行 guard は API キーを使用せず、旧 `anthropic_api_key` 入力は互換性のため受け取り口だけ残している。
+> **すでに `ANTHROPIC_API_KEY` を登録した repo がある場合、この workflow では不要なため secret を
+> 削除できる（`gh secret delete ANTHROPIC_API_KEY --repo <owner>/<repo>`）。guard を止めないよう、
+> workflow 自体は有効のままにする。**
 > この workflow のエンジンは `aro guard`（AI 不要の機械検証）へ**差し替え済み**
 > （[計画 03](./plans/03-guard-and-improve-loop.md) Stage 1-2、[`guard.md`](./guard.md) 参照）。
 > 以下は v0.1.1 時点の実装の記録として残す。
@@ -34,7 +35,7 @@ inputs:  config_path / lock_path
 secrets: anthropic_api_key
 ```
 
-エンジン（現在: `anthropics/claude-code-action`）は中央 repo の内部実装であり、この契約さえ守ればいつでも差し替えてよい。差し替えても対象 repo への影響はなく、`aro sync` も不要（配布側 `ai-review.yml` を変更しない限り）。破壊的変更（inputs/secrets の削除・必須化・型変更）を行う場合は `v1` を付け替えず `v2` を新規発行する（[`RELEASE.md`](../RELEASE.md) §1 参照）。
+エンジン（v0.1.1 時点: `anthropics/claude-code-action`）は中央 repo の内部実装であり、この契約さえ守ればいつでも差し替えてよい。実際に同じ契約を維持したまま、現在は `aro guard` へ差し替え済みである。差し替えても対象 repo への影響はなく、`aro sync` も不要（配布側 `ai-review.yml` を変更しない限り）。破壊的変更（inputs/secrets の削除・必須化・型変更）を行う場合は `v1` を付け替えず `v2` を新規発行する（[`RELEASE.md`](../RELEASE.md) §1 参照）。
 
 ## 対象 repo での有効化手順
 

@@ -295,6 +295,36 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     }
   });
 
+  it("reusable workflowのaction runtimeと実行Node.jsを24へ移行する", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+
+    expect([...workflow.matchAll(/uses: actions\/checkout@v5/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/uses: actions\/setup-node@v5/g)]).toHaveLength(1);
+    expect(workflow).not.toMatch(/uses: actions\/(?:checkout|setup-node)@v4/);
+    expect(workflow).toContain("node-version: 24");
+    expect(workflow).not.toContain("node-version: 20");
+    expect(workflow).toContain("package-manager-cache: false");
+  });
+
+  it("中央CIのaction runtimeをNode.js 24へ移行し、Node.js 20/24互換テストは維持する", async () => {
+    const workflow = await readFile(CI_WORKFLOW, "utf8");
+
+    expect([...workflow.matchAll(/uses: actions\/checkout@v5/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/uses: actions\/setup-node@v5/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/package-manager-cache: false/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/persist-credentials: false/g)]).toHaveLength(2);
+    expect(workflow).not.toMatch(/uses: actions\/(?:checkout|setup-node)@v4/);
+    expect(workflow).toContain('node-version: ["20", "24"]');
+  });
+
+  it("配布するai-review workflowがlegacy secretを現行guard未使用として説明する", async () => {
+    const workflow = await readFile(DISTRIBUTED_REVIEW_WORKFLOW, "utf8");
+
+    expect(workflow).toContain("現行 guard はこの secret を使用しない");
+    expect(workflow).not.toContain("ANTHROPIC_API_KEY は対象 repo の Actions secrets に登録する");
+    expect(workflow).not.toContain("未登録・fork PR の場合、AI レビューは明示的に skip");
+  });
+
   it("reusable workflowがknowledge導入repoだけを検証し、knowledge変更PRではstrictにする", async () => {
     const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
     expect(workflow).toContain(".ai/local/knowledge/index.yaml");
