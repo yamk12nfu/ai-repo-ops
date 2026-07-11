@@ -312,6 +312,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect([...workflow.matchAll(/uses: actions\/checkout@v5/g)]).toHaveLength(2);
     expect([...workflow.matchAll(/uses: actions\/setup-node@v5/g)]).toHaveLength(2);
     expect([...workflow.matchAll(/package-manager-cache: false/g)]).toHaveLength(2);
+    expect([...workflow.matchAll(/persist-credentials: false/g)]).toHaveLength(2);
     expect(workflow).not.toMatch(/uses: actions\/(?:checkout|setup-node)@v4/);
     expect(workflow).toContain('node-version: ["20", "24"]');
   });
