@@ -67,6 +67,13 @@ aro knowledge init --repo . --base HEAD
 既存 repo では、設定専用 PR を merge した後の branch で `--base origin/main` を指定する。`--dry-run` は
 作成予定だけを表示し、`--json` は機械可読な結果を返す。
 
+human向けの成功出力は、対象repoをローカルのCodex / Claude Codeで開いてそのまま貼り付けられる
+初回Knowledge作成プロンプトを表示する。AI更新後はまずworking treeを `knowledge check --strict` で検証し、
+人間が差分を確認してcommitした後、検証済みのauthorization revisionをbaseに `guard` を実行する順で
+案内する。実CLIのlauncher・対象repoの絶対path・authorization revisionを貼り付けるプロンプト内と
+後続コマンドの両方へ引き継ぐため、`aro` がPATHになくても、別directoryからinitしても実行できる。
+`--json` の出力契約にはこの案内を混ぜない。
+
 2ファイルの exclusive-create の途中で I/O error が発生した場合は、先に作成できた path と
 失敗した path を `KNOWLEDGE_INIT_PARTIAL_WRITE` とともに human / JSON の両形式で報告する。JSON では、
 成功済みで削除可能な path だけを `recovery.removePaths`、存在と内容を確認すべき失敗先を
@@ -141,8 +148,9 @@ build/**
 ```
 
 AI は tracked source を調査し、`.ai/local/knowledge/**` だけを変更する。検証に使った current HEAD の
-完全 SHA を index に記録し、`aro knowledge check --strict` と `aro guard` を通す。PR 作成と merge は
-開発者が差分を確認した後に行う。
+完全 SHA を index に記録し、未commitのworking treeを `aro knowledge check --strict` で検証する。
+`aro guard` は未commit差分を検査しないため、開発者が差分を確認してknowledge変更をcommitした後に通す。
+PR 作成はguard成功後、mergeは人間の確認後に行う。
 
 source code を同時に直すループではない。source が変更済みなら、その変更を先に commit し、その HEAD を
 根拠として knowledge を別の小さな変更で更新する。

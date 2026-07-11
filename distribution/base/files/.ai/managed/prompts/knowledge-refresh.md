@@ -15,6 +15,9 @@
 - repo root とすべての nested 階層にある `.env`、`.env.*`、`secrets/**`、`.git/**`、`.ai/**`、依存物、build生成物は読みません。
 - network、GitHub Issue/PR、Slack、Notion、CIログなどの外部情報は使いません。
 - 推測を事実として記録しません。根拠を特定できない内容は提案に留めます。
+- 初回entryでは変化しにくい正式文書を優先し、個別タスク・作業ログ・日次生成物は、明示的に対象指定されない限り根拠から除外します。
+- `aro` がPATHにない場合は、`knowledge init` に使った同じlauncherで各subcommandを実行します。
+- `knowledge init` の成功出力に完全な検証コマンドがある場合は、それを優先します。
 
 ## 進め方
 
@@ -23,7 +26,9 @@
 3. `aro knowledge check --repo . --strict` を実行し、stale・欠落・不正な根拠を確認します。
 4. 小さな更新単位を1つ選び、対応するMarkdownとindexだけを更新します。
 5. 各entryに正確なsource pathと、検証に使った完全なlowercase HEAD SHAを記録します。
-6. `aro knowledge check --repo . --strict` と `aro guard --repo . --base <base>` を通します。
-7. 目的、変更ファイル、根拠、検証結果、残った候補を開発者へ提示します。
+6. `aro knowledge check --repo . --strict` を通します。
+7. 未commitの変更は `aro guard` の検証対象外です。差分を開発者へ提示し、人間の確認を得てknowledge変更をcommitします。
+8. commit後に `aro guard --repo . --base <base>` を通します。
+9. 目的、変更ファイル、根拠、検証結果、残った候補を開発者へ提示します。
 
 PR作成とmergeは人間の確認後に行います。自動mergeはしません。
