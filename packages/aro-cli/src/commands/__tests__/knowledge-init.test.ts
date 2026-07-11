@@ -261,10 +261,11 @@ describe("executeKnowledgeInit", () => {
     await seedEnabledRepo();
     const absoluteRepoRoot = path.resolve(repoRoot);
     const cap = captureIo();
-    const configured = options() as KnowledgeInitOptions & { launcher: string };
-    configured.launcher = "node '/tmp/ai repo/packages/aro-cli/bin/aro'";
 
-    const code = await executeKnowledgeInit(configured, cap.io);
+    const code = await executeKnowledgeInit(
+      options({ launcher: "node '/tmp/ai repo/packages/aro-cli/bin/aro'" }),
+      cap.io,
+    );
 
     expect(code).toBe(KNOWLEDGE_INIT_EXIT.ok);
     expect(cap.out()).toContain(
