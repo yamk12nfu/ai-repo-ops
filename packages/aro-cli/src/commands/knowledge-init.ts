@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { Command } from "commander";
 
 import { AroError, KnowledgeError, ProjectConfigError } from "../core/errors.js";
@@ -32,6 +34,7 @@ export interface KnowledgeInitOptions {
   dryRun: boolean;
   json: boolean;
   color: boolean;
+  launcher?: string | undefined;
 }
 
 export interface KnowledgeInitIo {
@@ -123,7 +126,9 @@ export async function executeKnowledgeInit(
         )}\n`,
       );
     } else {
-      io.stdout(`${formatCreated(created)}\n`);
+      io.stdout(
+        `${formatCreated(created, authorizationRevision, options.launcher ?? "aro", repoRoot)}\n`,
+      );
     }
     return KNOWLEDGE_INIT_EXIT.ok;
   } catch (error) {
@@ -157,10 +162,49 @@ function formatInitPlan(plan: KnowledgeInitPlan): string {
   ].join("\n");
 }
 
-function formatCreated(created: readonly string[]): string {
-  return ["Created:", ...created.map((relativePath) => `  + ${relativePath}`), "", "Done."].join(
-    "\n",
-  );
+function formatCreated(
+  created: readonly string[],
+  authorizationRevision: string,
+  launcher: string,
+  repoRoot: string,
+): string {
+  const repoArgument = quotePosixShellArg(repoRoot);
+  const checkCommand = `${launcher} knowledge check --repo ${repoArgument} --strict`;
+  const guardCommand = `${launcher} guard --repo ${repoArgument} --base ${authorizationRevision}`;
+  return [
+    "Created:",
+    ...created.map((relativePath) => `  + ${relativePath}`),
+    "",
+    "Done.",
+    "",
+    "Next steps:",
+    "  1. 対象repoをCodexまたはClaude Codeで開き、次の範囲をそのまま入力します:",
+    "     ----- prompt start -----",
+    "     .ai/managed/prompts/knowledge-refresh.md を読み、リポジトリを調査して初回Repo Knowledgeを1単位作成してください。",
+    "     初回は変化しにくい正式文書を根拠とし、個別タスクや作業ログは除外してください。",
+    "     次の完全なコマンドでknowledgeを検証してください:",
+    `     ${checkCommand}`,
+    "     未commitの変更はaro guardの検証対象外です。knowledge check後に差分を提示してください。",
+    "     人間が差分を確認してcommitした後、次の完全なコマンドでguardを実行してください:",
+    `     ${guardCommand}`,
+    "     ----- prompt end -----",
+    "  2. AIの更新後、未commitのままknowledgeを検証します:",
+    `     ${checkCommand}`,
+    "  3. 人間が差分を確認してcommitした後、guardを実行します:",
+    `     ${guardCommand}`,
+    "  4. guardが成功したらPRを作成してください。自動mergeはしません。",
+    "",
+    "  Note: aroがPATHにない場合は、このinitに使った起動方法で同じsubcommandを実行してください。",
+  ].join("\n");
+}
+
+function quotePosixShellArg(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+export function formatCliLauncher(nodeExecutable: string, scriptPath?: string): string {
+  if (scriptPath === undefined) return "aro";
+  return `${quotePosixShellArg(nodeExecutable)} ${quotePosixShellArg(scriptPath)}`;
 }
 
 function outputBlocked(
@@ -276,11 +320,21 @@ export function registerKnowledgeInit(parent: Command): void {
     .option("--json", "JSONで結果を出力する。", false)
     .option("--no-color", "色なしで出力する。")
     .action(async (options: KnowledgeInitOptions) => {
-      const code = await executeKnowledgeInit(options, {
-        stdout: (text) => process.stdout.write(text),
-        stderr: (text) => process.stderr.write(text),
-        color: resolveColor(options.color),
-      });
+      const scriptPath = process.argv[1];
+      const code = await executeKnowledgeInit(
+        {
+          ...options,
+          launcher: formatCliLauncher(
+            process.execPath,
+            scriptPath === undefined ? undefined : path.resolve(scriptPath),
+          ),
+        },
+        {
+          stdout: (text) => process.stdout.write(text),
+          stderr: (text) => process.stderr.write(text),
+          color: resolveColor(options.color),
+        },
+      );
       process.exitCode = code;
     });
 }

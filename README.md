@@ -46,6 +46,26 @@ pnpm build
 pnpm -C packages/aro-cli link --global   # 以後、任意のディレクトリで aro が使える
 ```
 
+`aro` が PATH にない、または一時的に使うだけなら、global link は不要。中央 repo を一度 build し、
+Node entrypoint を直接実行する。
+
+```bash
+# 初回準備（中央 repo 内）
+cd /path/to/ai-repo-ops
+corepack pnpm install
+corepack pnpm build
+
+# 以後は任意のディレクトリから実行可能
+node /path/to/ai-repo-ops/packages/aro-cli/bin/aro --help
+node /path/to/ai-repo-ops/packages/aro-cli/bin/aro knowledge init \
+  --repo /path/to/your-repo \
+  --base origin/main
+```
+
+`knowledge init` の成功出力は、実際に使ったNode entrypoint、対象repoの絶対path、検証済みbase SHAを
+後続の `knowledge check` / `guard` とローカルAIへ貼るプロンプトに引き継ぐ。`aro` がPATHになくても、
+別directoryから初期化しても、表示された内容をそのまま使える。
+
 ```bash
 aro init --repo /path/to/your-repo     # 初回展開（.ai/ / workflow / lock を生成）
 aro diff --repo /path/to/your-repo     # 中央配布物との差分（実ファイルは変更しない）

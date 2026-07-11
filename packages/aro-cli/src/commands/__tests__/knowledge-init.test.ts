@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
   executeKnowledgeInit,
+  formatCliLauncher,
   KNOWLEDGE_INIT_EXIT,
   type KnowledgeInitIo,
   type KnowledgeInitOptions,
@@ -104,9 +105,20 @@ function captureIo(): { io: KnowledgeInitIo; out: () => string; err: () => strin
   };
 }
 
+describe("formatCliLauncher", () => {
+  it("Node executableとbin pathをPOSIX shell向けにquoteする", () => {
+    expect(formatCliLauncher("/Applications/Node JS/bin/node", "/tmp/it's aro/bin/aro")).toBe(
+      "'/Applications/Node JS/bin/node' '/tmp/it'\\''s aro/bin/aro'",
+    );
+    expect(formatCliLauncher("/usr/bin/node", undefined)).toBe("aro");
+  });
+});
+
 describe("executeKnowledgeInit", () => {
   it("indexとoverviewを新規作成しexit 0", async () => {
     await seedEnabledRepo();
+    const authorizationRevision = await gitRevParse(repoRoot, "HEAD");
+    const absoluteRepoRoot = path.resolve(repoRoot);
     const cap = captureIo();
 
     const code = await executeKnowledgeInit(options(), cap.io);
@@ -115,6 +127,38 @@ describe("executeKnowledgeInit", () => {
     expect(await readFile(path.join(repoRoot, KNOWLEDGE_INDEX_PATH), "utf8")).toContain("entries: []");
     expect(await readFile(path.join(repoRoot, KNOWLEDGE_OVERVIEW_PATH), "utf8")).toContain("Repo Knowledge");
     expect(cap.out()).toContain("Created:");
+    expect(cap.out()).toContain("\nDone.\n\nNext steps:");
+    expect(cap.out()).toContain("Next steps:");
+    expect(cap.out()).toContain(
+      ".ai/managed/prompts/knowledge-refresh.md を読み、リポジトリを調査して初回Repo Knowledgeを1単位作成してください。",
+    );
+    expect(cap.out()).toContain(
+      "初回は変化しにくい正式文書を根拠とし、個別タスクや作業ログは除外してください。",
+    );
+    expect(cap.out()).toContain("未commitの変更はaro guardの検証対象外です");
+    const checkCommand = `aro knowledge check --repo '${absoluteRepoRoot}' --strict`;
+    const guardCommand = `aro guard --repo '${absoluteRepoRoot}' --base ${authorizationRevision}`;
+    expect(cap.out()).toContain(checkCommand);
+    expect(cap.out()).toContain(guardCommand);
+    const promptStart = cap.out().indexOf("----- prompt start -----");
+    const promptEnd = cap.out().indexOf("----- prompt end -----");
+    expect(promptStart).toBeGreaterThanOrEqual(0);
+    expect(promptEnd).toBeGreaterThan(promptStart);
+    expect(cap.out().indexOf(checkCommand)).toBeGreaterThan(promptStart);
+    expect(cap.out().indexOf(checkCommand)).toBeLessThan(promptEnd);
+    expect(cap.out().indexOf(guardCommand)).toBeGreaterThan(promptStart);
+    expect(cap.out().indexOf(guardCommand)).toBeLessThan(promptEnd);
+    expect(cap.out()).not.toContain("--repo .");
+    expect(cap.out()).toContain(
+      "aroがPATHにない場合は、このinitに使った起動方法で同じsubcommandを実行してください。",
+    );
+    expect(cap.out().indexOf("aro knowledge check")).toBeLessThan(
+      cap.out().indexOf("人間が差分を確認してcommitした後"),
+    );
+    expect(cap.out().indexOf("人間が差分を確認してcommitした後")).toBeLessThan(
+      cap.out().indexOf("aro guard --repo"),
+    );
+    expect(cap.out()).toContain("自動mergeはしません");
     expect(cap.err()).toBe("");
   });
 
@@ -129,6 +173,7 @@ describe("executeKnowledgeInit", () => {
       code: "ENOENT",
     });
     expect(cap.out()).toContain("dry-run");
+    expect(cap.out()).not.toContain("Next steps:");
   });
 
   it("既存indexを上書きせずblocked(exit 2)", async () => {
@@ -204,9 +249,31 @@ describe("executeKnowledgeInit", () => {
     const parsed = JSON.parse(cap.out()) as { command: string; ok: boolean; created: string[] };
 
     expect(code).toBe(KNOWLEDGE_INIT_EXIT.ok);
+    expect(Object.keys(parsed).sort()).toEqual(
+      ["authorizationRevision", "base", "command", "created", "ok"].sort(),
+    );
     expect(parsed.command).toBe("knowledge init");
     expect(parsed.ok).toBe(true);
     expect(parsed.created.sort()).toEqual([KNOWLEDGE_INDEX_PATH, KNOWLEDGE_OVERVIEW_PATH].sort());
+  });
+
+  it("指定されたCLI launcherを後続コマンドへ引き継ぐ", async () => {
+    await seedEnabledRepo();
+    const absoluteRepoRoot = path.resolve(repoRoot);
+    const cap = captureIo();
+
+    const code = await executeKnowledgeInit(
+      options({ launcher: "node '/tmp/ai repo/packages/aro-cli/bin/aro'" }),
+      cap.io,
+    );
+
+    expect(code).toBe(KNOWLEDGE_INIT_EXIT.ok);
+    expect(cap.out()).toContain(
+      `node '/tmp/ai repo/packages/aro-cli/bin/aro' knowledge check --repo '${absoluteRepoRoot}' --strict`,
+    );
+    expect(cap.out()).toContain(
+      `node '/tmp/ai repo/packages/aro-cli/bin/aro' guard --repo '${absoluteRepoRoot}' --base `,
+    );
   });
 
   it("plan後にindexが競合すると作成済みpathとhuman向け復旧手順を報告してexit 3", async () => {

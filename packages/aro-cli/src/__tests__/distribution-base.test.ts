@@ -52,6 +52,16 @@ const MANAGED_KNOWLEDGE_SCHEMA_COPY = path.join(
   "schemas",
   "knowledge.schema.json",
 );
+const KNOWLEDGE_REFRESH_PROMPT = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".ai",
+  "managed",
+  "prompts",
+  "knowledge-refresh.md",
+);
 const TEMPLATE = path.join(REPO_ROOT, "distribution", "base", "project.yaml.hbs");
 const DISTRIBUTED_REVIEW_WORKFLOW = path.join(
   REPO_ROOT,
@@ -247,6 +257,24 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       readFile(MANAGED_KNOWLEDGE_SCHEMA_COPY, "utf8"),
     ]);
     expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
+  });
+
+  it("knowledge refresh promptが安定した初回sourceとcommit後guardを案内する", async () => {
+    const prompt = await readFile(KNOWLEDGE_REFRESH_PROMPT, "utf8");
+
+    expect(prompt).toContain("初回entryでは変化しにくい正式文書を優先し");
+    expect(prompt).toContain("個別タスク・作業ログ・日次生成物");
+    expect(prompt).toContain("knowledge init` に使った同じlauncher");
+    expect(prompt).toContain("knowledge init` の成功出力に完全な検証コマンドがある場合は、それを優先");
+    expect(prompt).toContain("未commitの変更は `aro guard` の検証対象外");
+    const checkIndex = prompt.indexOf("6. `aro knowledge check");
+    const uncommittedIndex = prompt.indexOf("7. 未commitの変更");
+    const guardIndex = prompt.indexOf("8. commit後に `aro guard");
+    expect(checkIndex).toBeGreaterThanOrEqual(0);
+    expect(uncommittedIndex).toBeGreaterThanOrEqual(0);
+    expect(guardIndex).toBeGreaterThanOrEqual(0);
+    expect(checkIndex).toBeLessThan(uncommittedIndex);
+    expect(uncommittedIndex).toBeLessThan(guardIndex);
   });
 
   it("authoritative schema が valid な JSON Schema である", async () => {
