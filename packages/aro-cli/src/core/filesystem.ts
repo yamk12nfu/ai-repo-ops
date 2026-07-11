@@ -81,6 +81,24 @@ export async function writeTextFileWithinRoot(
 }
 
 /**
+ * root配下へ新規テキストファイルをexclusive-createする。
+ * 既存pathは `EEXIST` で拒否し、内容を一切上書きしない。
+ */
+export async function writeTextFileExclusiveWithinRoot(
+  rootDir: string,
+  relativePath: string,
+  content: string,
+  label = "path",
+): Promise<string> {
+  const absolutePath = resolveWithinRoot(rootDir, relativePath, label);
+  await assertNoSymlinkInPath(rootDir, relativePath, label);
+  const normalized = canonicalizeTextString(content);
+  await ensureDir(path.dirname(absolutePath));
+  await writeFile(absolutePath, Buffer.from(normalized, "utf8"), { flag: "wx" });
+  return absolutePath;
+}
+
+/**
  * ファイルの canonical SHA-256 を返す。存在しなければ null。
  * {@link readFileIfExists} と {@link canonicalSha256} の合成で、conflict 判定の入力に使う。
  */

@@ -41,7 +41,29 @@ const MANAGED_SCHEMA_COPY = path.join(
   "schemas",
   "project.schema.json",
 );
+const AUTHORITATIVE_KNOWLEDGE_SCHEMA = path.join(REPO_ROOT, "schemas", "knowledge.schema.json");
+const MANAGED_KNOWLEDGE_SCHEMA_COPY = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".ai",
+  "managed",
+  "schemas",
+  "knowledge.schema.json",
+);
 const TEMPLATE = path.join(REPO_ROOT, "distribution", "base", "project.yaml.hbs");
+const DISTRIBUTED_REVIEW_WORKFLOW = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".github",
+  "workflows",
+  "ai-review.yml",
+);
+const REUSABLE_REVIEW_WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "ai-review.reusable.yml");
+const CI_WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "ci.yml");
 
 // ---------------------------------------------------------------------------
 // 最小 JSON Schema バリデータ（オフライン・依存追加なし）。
@@ -174,7 +196,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(loaded.manifest.name).toBe("base");
     expect(loaded.manifest.schema_version).toBe(1);
 
-    // managed files: §9.3 の 8 件。
+    // managed files: prompts 5件 + policies 3件 + schemas 2件。
     expect(loaded.managedFiles.map((file) => file.dest).sort()).toEqual(
       [
         ".ai/managed/policies/default.yaml",
@@ -182,8 +204,10 @@ describe("distribution/base（Phase 3 完了条件）", () => {
         ".ai/managed/policies/security.yaml",
         ".ai/managed/prompts/improve.md",
         ".ai/managed/prompts/issue-fix.md",
+        ".ai/managed/prompts/knowledge-refresh.md",
         ".ai/managed/prompts/release-check.md",
         ".ai/managed/prompts/review.md",
+        ".ai/managed/schemas/knowledge.schema.json",
         ".ai/managed/schemas/project.schema.json",
       ].sort(),
     );
@@ -217,6 +241,14 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
   });
 
+  it("managed knowledge schema copy が authoritative schema と一致する", async () => {
+    const [authoritative, managed] = await Promise.all([
+      readFile(AUTHORITATIVE_KNOWLEDGE_SCHEMA, "utf8"),
+      readFile(MANAGED_KNOWLEDGE_SCHEMA_COPY, "utf8"),
+    ]);
+    expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
+  });
+
   it("authoritative schema が valid な JSON Schema である", async () => {
     const schema = await readSchema();
     expect(schema["$schema"]).toBe("http://json-schema.org/draft-07/schema#");
@@ -239,7 +271,89 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       expect(rendered["schema_version"]).toBe(1);
       const project = rendered["project"];
       expect(isPlainObject(project) ? project["name"] : undefined).toBe("sample-repo");
+      const ai = rendered["ai"];
+      const allowedPaths = isPlainObject(ai) ? ai["allowed_paths"] : undefined;
+      expect(Array.isArray(allowedPaths) ? allowedPaths : []).toContain(".ai/local/knowledge/**");
     }
+  });
+
+  it("knowledge MarkdownをLF管理するgitattributes patchを配布する", async () => {
+    const loaded = await loadDistribution(REPO_ROOT, "base");
+    const attributes = loaded.patches.find((patch) => patch.path === ".gitattributes");
+    expect(attributes?.lines).toContain(".ai/local/knowledge/** text eol=lf");
+  });
+
+  it("配布するai-review workflowのpermissionsを必要最小限に限定する", async () => {
+    const workflow = parseYaml(await readFile(DISTRIBUTED_REVIEW_WORKFLOW, "utf8"));
+
+    expect(isPlainObject(workflow)).toBe(true);
+    if (isPlainObject(workflow)) {
+      expect(workflow["permissions"]).toEqual({
+        contents: "read",
+        "pull-requests": "write",
+      });
+    }
+  });
+
+  it("reusable workflowがknowledge導入repoだけを検証し、knowledge変更PRではstrictにする", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+    expect(workflow).toContain(".ai/local/knowledge/index.yaml");
+    expect(workflow).toContain('git cat-file -e "origin/$BASE_REF:$INDEX_PATH"');
+    expect(workflow).toContain("knowledge check");
+    expect(workflow).toContain("--strict");
+    expect(workflow).toContain("Fail on knowledge violations");
+  });
+
+  it("reusable workflowの生成物をcheckout外のRUNNER_TEMPへ隔離する", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+
+    expect(workflow).toContain('id: artifacts');
+    expect(workflow).toContain('mktemp -d "$RUNNER_TEMP/aro-review.XXXXXX"');
+    expect(workflow).toContain('ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}');
+
+    for (const artifact of [
+      "guard-result.json",
+      "guard-error.json",
+      "guard-violations.md",
+      "knowledge-result.json",
+      "knowledge-error.json",
+      "knowledge-findings.md",
+      "guard-comment.md",
+    ]) {
+      expect(workflow).toContain(`"$ARTIFACTS_DIR/${artifact}"`);
+      expect(workflow).not.toMatch(new RegExp(`(?<!/)${artifact.replace(".", "\\.")}`));
+    }
+  });
+
+  it("knowledge結果JSONの変換失敗をexit 3としてfail-closedにする", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+    const start = workflow.indexOf("      - name: Run knowledge check");
+    const end = workflow.indexOf("      - name: Write step summary", start);
+    const step = workflow.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(step).toContain("if ! jq -r '");
+    expect(step).toContain('echo "knowledge checkのJSON結果を処理できませんでした。" >&2');
+    expect(step).toContain('echo "exit_code=3" >> "$GITHUB_OUTPUT"');
+    expect(step).toContain("exit 3");
+
+    const unexpectedCodeOutput = step.indexOf('echo "exit_code=$code" >> "$GITHUB_OUTPUT"');
+    const jsonConversion = step.indexOf("if ! jq -r '");
+    const successfulCodeOutput = step.lastIndexOf('echo "exit_code=$code" >> "$GITHUB_OUTPUT"');
+    expect(unexpectedCodeOutput).toBeGreaterThanOrEqual(0);
+    expect(unexpectedCodeOutput).toBeLessThan(jsonConversion);
+    expect(successfulCodeOutput).toBeGreaterThan(jsonConversion);
+  });
+
+  it("tarball smokeがknowledgeサブコマンドとHEAD設定境界を検証する", async () => {
+    const workflow = await readFile(CI_WORKFLOW, "utf8");
+    expect(workflow).toContain("aro knowledge --help");
+    expect(workflow).toContain('git -C "$FIXTURE" commit');
+    expect(workflow).toContain("aro knowledge init");
+    expect(workflow).toContain("--base HEAD");
+    expect(workflow).toContain("aro knowledge check");
+    expect(workflow).toContain("--strict");
   });
 
   it("ミニバリデータが不正な project.yaml を検出する（バリデータ自体の健全性）", async () => {

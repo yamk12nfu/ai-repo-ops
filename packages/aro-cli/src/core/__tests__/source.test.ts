@@ -6,7 +6,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { canonicalSha256OfString } from "../checksum.js";
 import { ManifestError, SourceError } from "../errors.js";
-import { loadDistribution, loadProjectSchema, resolveSourceLocation, resolveSourceRoot } from "../source.js";
+import {
+  loadDistribution,
+  loadKnowledgeSchema,
+  loadProjectSchema,
+  resolveSourceLocation,
+  resolveSourceRoot,
+} from "../source.js";
 
 let sourceRoot: string;
 
@@ -313,6 +319,26 @@ describe("loadProjectSchema", () => {
     await writeSourceBytes("schemas/project.schema.json", Buffer.from([0x68, 0x69, 0xff, 0x0a]));
     await expect(loadProjectSchema(sourceRoot)).rejects.toMatchObject({
       code: "SOURCE_FILE_NOT_UTF8",
+    });
+  });
+});
+
+describe("loadKnowledgeSchema", () => {
+  it("schemas/knowledge.schema.json を JSON.parse して返す", async () => {
+    await writeSourceFile("schemas/knowledge.schema.json", '{"type":"object"}');
+    await expect(loadKnowledgeSchema(sourceRoot)).resolves.toEqual({ type: "object" });
+  });
+
+  it("ファイルが無ければ KNOWLEDGE_SCHEMA_NOT_FOUND", async () => {
+    await expect(loadKnowledgeSchema(sourceRoot)).rejects.toMatchObject({
+      code: "KNOWLEDGE_SCHEMA_NOT_FOUND",
+    });
+  });
+
+  it("壊れたJSONなら KNOWLEDGE_SCHEMA_PARSE", async () => {
+    await writeSourceFile("schemas/knowledge.schema.json", "{broken");
+    await expect(loadKnowledgeSchema(sourceRoot)).rejects.toMatchObject({
+      code: "KNOWLEDGE_SCHEMA_PARSE",
     });
   });
 });

@@ -74,12 +74,23 @@ jobs:
           npm init -y > /dev/null
           npm install "$RUNNER_TEMP"/ai-repo-ops-aro-cli-*.tgz > /dev/null
           ./node_modules/.bin/aro --help > /dev/null
-          echo "aro --help OK"
+          ./node_modules/.bin/aro knowledge --help > /dev/null
+          echo "aro --help + knowledge --help OK"
           FIXTURE="$RUNNER_TEMP/fixture"
           mkdir -p "$FIXTURE" && git -C "$FIXTURE" init -q
           ./node_modules/.bin/aro init --repo "$FIXTURE" --source "$GITHUB_WORKSPACE" > /dev/null
           ./node_modules/.bin/aro doctor --repo "$FIXTURE" --source "$GITHUB_WORKSPACE" > /dev/null
-          echo "init + doctor with --source OK"
+          git -C "$FIXTURE" config user.email "aro-smoke@example.com"
+          git -C "$FIXTURE" config user.name "aro smoke"
+          git -C "$FIXTURE" add -A
+          git -C "$FIXTURE" commit -qm "chore: initialize ai-repo-ops"
+          ./node_modules/.bin/aro knowledge init \
+            --repo "$FIXTURE" --base HEAD --source "$GITHUB_WORKSPACE" > /dev/null
+          ./node_modules/.bin/aro knowledge check \
+            --repo "$FIXTURE" --source "$GITHUB_WORKSPACE" --strict > /dev/null
+          test -f "$FIXTURE/.ai/local/knowledge/index.yaml"
+          test -f "$FIXTURE/.ai/local/knowledge/overview.md"
+          echo "init + doctor + knowledge init/check with --source OK"
 
       - name: Source-not-found error is helpful
         run: |

@@ -648,6 +648,38 @@ jobs:
     expect(findCheck(report, "workflow.ai-review.permissions")?.status).toBe("fail");
   });
 
+  it("旧AI engine向けの不要なwrite権限はWARNし、create_only workflowの手動修正を案内する", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await initGitRepo(repoRoot);
+    await writeRaw(
+      repoRoot,
+      ".github/workflows/ai-review.yml",
+      `name: AI Review
+on:
+  pull_request: {}
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+jobs:
+  ai_review:
+    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml@v1
+    permissions:
+      id-token: write
+`,
+    );
+    const dist = await loadDistribution(sourceRoot, "base");
+    const report = await runDoctor({ repoRoot, distribution: dist, projectSchema: PROJECT_SCHEMA });
+
+    const check = findCheck(report, "workflow.ai-review.permissions");
+    expect(check?.status).toBe("warn");
+    expect(check?.message).toContain("id-token: write");
+    expect(check?.message).toContain("issues: write");
+    expect(check?.hint).toContain("手動で削除");
+    expect(check?.hint).toContain("create_only");
+    expect(check?.hint).toContain("aro sync");
+  });
+
   it("legacy ai-improve workflow が残っていれば WARN（手動削除を案内。個別チェックは出さない）", async () => {
     await setupBaseDistribution(sourceRoot);
     await initGitRepo(repoRoot);

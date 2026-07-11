@@ -5,9 +5,10 @@ import { registerDiff } from "./commands/diff.js";
 import { registerSync } from "./commands/sync.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerGuard } from "./commands/guard.js";
+import { registerKnowledge } from "./commands/knowledge.js";
 
 /** aro CLI のバージョン。manifest.version とは独立した CLI 自身のバージョン。 */
-export const ARO_CLI_VERSION = "0.1.3";
+export const ARO_CLI_VERSION = "0.2.0";
 
 /**
  * aro のコマンドツリーを構築する。
@@ -30,6 +31,7 @@ export function buildProgram(): Command {
   registerSync(program);
   registerDoctor(program);
   registerGuard(program);
+  registerKnowledge(program);
 
   return program;
 }

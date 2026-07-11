@@ -63,7 +63,8 @@ PR がすでに green ならこの節は再確認のみでよい。）
 
 ## 3. 手動受け入れテスト（使い捨て repo）
 
-`aro init → doctor → diff → sync` の一連の流れが、実際の git repo に対して問題なく通ることを確認する。
+`aro init → doctor → diff → sync → knowledge init → knowledge check` の一連の流れが、実際の git repo に
+対して問題なく通ることを確認する。
 このリポジトリ自身ではなく、使い捨ての別 repo に対して行う。
 
 ```bash
@@ -80,7 +81,15 @@ pnpm aro doctor --repo "$SMOKE_REPO"; echo "doctor exit=$?"
 pnpm aro diff --repo "$SMOKE_REPO" --detailed-exitcode; echo "diff exit=$?"
 pnpm aro sync --repo "$SMOKE_REPO"; echo "sync exit=$?"
 
-# 4. 後片付け
+# 4. 新規repoは初期commit自体を認可基準にするため、init結果をcommitして --base HEAD で実行する
+git -C "$SMOKE_REPO" config user.email "aro-smoke@example.com"
+git -C "$SMOKE_REPO" config user.name "aro smoke"
+git -C "$SMOKE_REPO" add -A
+git -C "$SMOKE_REPO" commit -qm "chore: initialize ai-repo-ops"
+pnpm aro knowledge init --repo "$SMOKE_REPO" --base HEAD; echo "knowledge init exit=$?"
+pnpm aro knowledge check --repo "$SMOKE_REPO" --strict; echo "knowledge check exit=$?"
+
+# 5. 後片付け
 rm -rf "$SMOKE_REPO"
 ```
 
@@ -92,6 +101,9 @@ rm -rf "$SMOKE_REPO"
 - `aro sync` が conflict なく完了する（終了コード `0`。`init` 直後で差分が無いため
   「up to date」として即完了するのが期待される挙動であり、これはこの smoke test では
   「sync 自体がエラーなく走ること」の確認が目的）。
+- `aro knowledge init --base HEAD` が `index.yaml` / `overview.md` を作成して終了コード `0`、続く strict
+  check も終了コード `0`。空のentriesに対するWARNは初期状態として正常。既存 repo の受け入れ確認では
+  設定専用 PR の merge 後に `--base origin/main` を使う。
 
 ## 4. distribution の version bump 確認
 
