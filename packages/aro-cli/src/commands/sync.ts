@@ -20,12 +20,15 @@ import type { Command } from "commander";
 import { addCommonOptions, type CommonOptions } from "../common-options.js";
 import { ApplyIoError, applyPlan } from "../core/apply.js";
 import { AroError } from "../core/errors.js";
+import { readFileWithinRoot } from "../core/filesystem.js";
 import { assertGitRepo } from "../core/git.js";
 import { loadLockFile } from "../core/lockfile.js";
+import { PROJECT_YAML_PATH } from "../core/manifest.js";
 import { buildSyncPlan } from "../core/planner.js";
 import { planRequiresSync } from "../core/plan-summary.js";
+import { tryParseProjectName } from "../core/project-config.js";
 import { loadDistribution, resolveSourceRoot } from "../core/source.js";
-import { deriveRepoName } from "../core/template.js";
+import { deriveRepoName, resolveTemplateRepoName } from "../core/template.js";
 import type { SyncPlan } from "../types/plan.js";
 import { formatSyncApplied, formatSyncUpToDate, type SyncMeta } from "./apply-format.js";
 import { errorToJson, formatApplyIoError, formatAroError } from "./cli-error.js";
@@ -69,6 +72,20 @@ function syncMeta(plan: SyncPlan): SyncMeta {
     currentContentSha256: plan.currentDistributionSha256,
     targetContentSha256: plan.targetDistributionSha256,
   };
+}
+
+/** 既存repoのstable template contextをbest-effortで解決する。 */
+async function resolveSyncRepoName(repoRoot: string): Promise<string> {
+  try {
+    const projectYaml = await readFileWithinRoot(repoRoot, PROJECT_YAML_PATH, "project.yaml");
+    return resolveTemplateRepoName(
+      repoRoot,
+      projectYaml === null ? undefined : tryParseProjectName(projectYaml.toString("utf8")),
+    );
+  } catch {
+    // project.yamlが無い・壊れている・読めない旧repoでも、従来どおりsyncを継続する。
+    return deriveRepoName(repoRoot);
+  }
 }
 
 /**
@@ -123,7 +140,8 @@ export async function executeSync(options: SyncOptions, io: SyncIo): Promise<num
       repoRoot,
       existingLock,
       now: io.now(),
-      repoName: deriveRepoName(repoRoot),
+      repoName:
+        existingLock === null ? deriveRepoName(repoRoot) : await resolveSyncRepoName(repoRoot),
     });
 
     if (options.json) {

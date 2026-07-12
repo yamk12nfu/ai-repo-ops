@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveRepoName, renderTemplate } from "../template.js";
+import {
+  deriveRepoName,
+  renderTemplate,
+  resolveTemplateRepoName,
+} from "../template.js";
 
 describe("renderTemplate", () => {
   it("{{ repo_name }}（前後空白あり）を置換する", () => {
@@ -51,5 +55,15 @@ describe("deriveRepoName", () => {
 
   it("root（/）など basename が空なら repo にフォールバックする", () => {
     expect(deriveRepoName("/")).toBe("repo");
+  });
+});
+
+describe("resolveTemplateRepoName", () => {
+  it("project.nameをdirectory名より優先する", () => {
+    expect(resolveTemplateRepoName("/tmp/checkout", "demo")).toBe("demo");
+  });
+
+  it("project.nameが無ければdirectory名へfallbackする", () => {
+    expect(resolveTemplateRepoName("/tmp/checkout")).toBe("checkout");
   });
 });

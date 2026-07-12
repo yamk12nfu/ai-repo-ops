@@ -32,11 +32,20 @@ import { ProjectConfigError, PolicyError } from "../core/errors.js";
 import { assertGitRepo } from "../core/git.js";
 import { getChangedFiles, getMergeBase, readFileAtRevision } from "../core/git-diff.js";
 import { runGuard, type GuardReport } from "../core/guard.js";
+import { LOCKFILE_RELATIVE_PATH, parseLockFile } from "../core/lockfile.js";
 import { PROJECT_YAML_PATH } from "../core/manifest.js";
 import { parsePolicy, policyPathForRiskLevel, type Policy } from "../core/policy.js";
 import { parseProjectConfig, type ProjectConfig, type RiskLevel } from "../core/project-config.js";
+import { loadDistribution, resolveSourceRoot } from "../core/source.js";
+import {
+  authenticateSyncChange,
+  createNotApplicableSyncAuthenticationReport,
+  type SyncAuthenticationReport,
+} from "../core/sync-authentication.js";
+import { resolveTemplateRepoName } from "../core/template.js";
 import { errorToJson, formatAroError } from "./cli-error.js";
 import { formatGuardHuman } from "./guard-format.js";
+import { defaultSourceStartDir } from "./source-context.js";
 
 /** guard の終了コード（doctor と同型）。 */
 export const GUARD_EXIT = {
@@ -125,14 +134,50 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
     // diff も同じ merge-base SHA で取る（project.yaml/policy を読んだ時点と diff の対象を一致させる）。
     const changedFiles = await getChangedFiles(repoRoot, mergeBaseSha);
 
-    const report: GuardReport = runGuard({ changedFiles, projectConfig, policy });
+    let trustedSync: SyncAuthenticationReport =
+      createNotApplicableSyncAuthenticationReport("lock_unchanged");
+    if (changedFiles.some((file) => file.path === LOCKFILE_RELATIVE_PATH)) {
+      const baseLockText = await readFileAtRevision(
+        repoRoot,
+        mergeBaseSha,
+        LOCKFILE_RELATIVE_PATH,
+      );
+      if (baseLockText === null) {
+        trustedSync = createNotApplicableSyncAuthenticationReport("base_lock_missing");
+      } else {
+        const baseLock = parseLockFile(
+          baseLockText,
+          `${mergeBaseSha}:${LOCKFILE_RELATIVE_PATH}`,
+        );
+        const sourceRoot = await resolveSourceRoot(options.source, defaultSourceStartDir());
+        const distribution = await loadDistribution(sourceRoot, baseLock.source.distribution);
+        trustedSync = await authenticateSyncChange({
+          repoRoot,
+          repoName: resolveTemplateRepoName(repoRoot, projectConfig.project.name),
+          mergeBaseSha,
+          changedFiles,
+          distribution,
+        });
+      }
+    }
+
+    const report: GuardReport = runGuard({
+      changedFiles,
+      projectConfig,
+      policy,
+      trustedSyncPaths: new Set(
+        trustedSync.status === "authenticated" ? trustedSync.paths : [],
+      ),
+    });
 
     if (options.json) {
       io.stdout(
-        `${JSON.stringify({ command: "guard", ok: !report.hasViolations, base: options.base, report }, null, 2)}\n`,
+        `${JSON.stringify({ command: "guard", ok: !report.hasViolations, base: options.base, trustedSync, report }, null, 2)}\n`,
       );
     } else {
-      io.stdout(`${formatGuardHuman(report, { base: options.base, color: io.color })}\n`);
+      io.stdout(
+        `${formatGuardHuman(report, { base: options.base, color: io.color, trustedSync })}\n`,
+      );
     }
     return report.hasViolations ? GUARD_EXIT.violations : GUARD_EXIT.ok;
   } catch (error) {

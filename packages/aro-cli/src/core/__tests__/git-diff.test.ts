@@ -1,10 +1,19 @@
-import { rm, writeFile } from "node:fs/promises";
+import { rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { GitDiffError } from "../errors.js";
-import { getChangedFiles, getMergeBase, readFileAtRevision } from "../git-diff.js";
+import {
+  isRegularGitTreeEntry,
+  readBlobObject,
+  readTreeEntryAtRevision,
+} from "../git-tree.js";
+import {
+  getChangedFiles,
+  getMergeBase,
+  readFileAtRevision,
+} from "../git-diff.js";
 import { makeTempDir, writeRaw } from "../../test-support/distribution.fixture.js";
 import {
   gitCheckout,
@@ -210,6 +219,65 @@ describe("readFileAtRevision", () => {
 
     await expect(readFileAtRevision(repoRoot, "does-not-exist-rev", "a.txt")).rejects.toMatchObject({
       code: "GIT_SHOW_FAILED",
+    });
+  });
+});
+
+describe("readTreeEntryAtRevision / readBlobObject", () => {
+  it.each([
+    ["41桁", "a".repeat(41)],
+    ["63桁", "b".repeat(63)],
+  ])("%sのobject IDを完全長SHAとして受理しない", async (_label, objectId) => {
+    await expect(readBlobObject(repoRoot, objectId)).rejects.toMatchObject({
+      code: "GIT_BLOB_ID_INVALID",
+    });
+  });
+
+  it("通常fileのGit mode・object id・raw bytesを返す", async () => {
+    const bytes = Buffer.from([0x00, 0xff, 0x0a]);
+    await writeFile(path.join(repoRoot, "binary.dat"), bytes);
+    await gitCommitAll(repoRoot, "chore: add raw blob");
+
+    const entry = await readTreeEntryAtRevision(repoRoot, "HEAD", "binary.dat");
+    expect(entry).toMatchObject({ mode: "100644", type: "blob" });
+    expect(entry === null ? false : isRegularGitTreeEntry(entry)).toBe(true);
+    expect(await readBlobObject(repoRoot, entry?.objectId ?? "")).toEqual(bytes);
+  });
+
+  it("symlinkを通常fileと区別できるmodeで返す", async () => {
+    await writeRaw(repoRoot, "target.txt", "target\n");
+    await symlink("target.txt", path.join(repoRoot, "link.txt"));
+    await gitCommitAll(repoRoot, "chore: add symlink");
+
+    const entry = await readTreeEntryAtRevision(repoRoot, "HEAD", "link.txt");
+    expect(entry).toMatchObject({
+      mode: "120000",
+      type: "blob",
+    });
+    expect(entry === null ? false : isRegularGitTreeEntry(entry)).toBe(false);
+  });
+
+  it("revisionにpathが存在しなければnull", async () => {
+    await writeRaw(repoRoot, "a.txt", "a\n");
+    await gitCommitAll(repoRoot, "init");
+
+    await expect(readTreeEntryAtRevision(repoRoot, "HEAD", "missing.txt")).resolves.toBeNull();
+  });
+
+  it("pathspec記号をglobとして展開せずliteral pathとして扱う", async () => {
+    await writeRaw(repoRoot, "docs/a.md", "a\n");
+    await writeRaw(repoRoot, "docs/b.md", "b\n");
+    await gitCommitAll(repoRoot, "docs: add files");
+
+    await expect(readTreeEntryAtRevision(repoRoot, "HEAD", "docs/*.md")).resolves.toBeNull();
+  });
+
+  it("安全でない相対pathをgitへ渡す前に拒否する", async () => {
+    await writeRaw(repoRoot, "a.txt", "a\n");
+    await gitCommitAll(repoRoot, "init");
+
+    await expect(readTreeEntryAtRevision(repoRoot, "HEAD", "../a.txt")).rejects.toMatchObject({
+      code: "PATH_TRAVERSAL",
     });
   });
 });

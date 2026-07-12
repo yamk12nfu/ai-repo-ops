@@ -334,6 +334,34 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(workflow).toContain("package-manager-cache: false");
   });
 
+  it("reusable guardが同じworkflow commitのengine checkoutをauthoritative sourceに固定する", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+    const start = workflow.indexOf("      - name: Run aro guard");
+    const end = workflow.indexOf("      - name: Run knowledge check", start);
+    const step = workflow.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(workflow).toContain("ref: ${{ job.workflow_sha");
+    expect(workflow).not.toContain("job.workflow_sha ||");
+    expect(workflow).not.toContain("job.workflow_repository ||");
+    expect(step).toContain("--source .aro-engine");
+  });
+
+  it("reusable workflowのstep summaryにtrusted sync認証結果を表示する", async () => {
+    const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
+    const start = workflow.indexOf("      - name: Write step summary");
+    const end = workflow.indexOf("      - name: Comment violations on PR", start);
+    const step = workflow.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(step).toContain(".trustedSync.status");
+    expect(step).toContain(".trustedSync.paths");
+    expect(step).not.toContain(".trustedSync.trustedPaths");
+    expect(step).toContain("Trusted sync");
+  });
+
   it("中央CIのaction runtimeをNode.js 24へ移行し、Node.js 20/24互換テストは維持する", async () => {
     const workflow = await readFile(CI_WORKFLOW, "utf8");
 

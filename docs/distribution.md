@@ -76,7 +76,7 @@ MVP の strategy は 3 つのみ。挙動の詳細（conflict 判定含む）は
 
 - 対象ファイルが存在しない場合だけ作成する。既存なら以後 `aro sync` で二度と触らない（`preserve` 扱い）。
 - `src` と `template` はどちらか一方だけを持たなければならない（両方あり／両方なしは validation error）。
-  - `template`: Handlebars 的な `{{ repo_name }}` プレースホルダを repo 名で置換してから書き込む（`packages/aro-cli/src/core/template.ts`）。プレースホルダ以外の内容はそのまま。
+  - `template`: Handlebars 的な `{{ repo_name }}` プレースホルダを repo 名で置換してから書き込む（`packages/aro-cli/src/core/template.ts`）。`init` ではrepo rootのディレクトリ名、既存repoへの`sync`では`.ai/project.yaml`の`project.name`を使う（設定が無い・不正な旧repoだけディレクトリ名へfallback）。プレースホルダ以外の内容はそのまま。
   - `src`: プレースホルダ置換なしでそのまま書き込む（workflow stub など）。
 
 #### 配布終了した seed file の扱い

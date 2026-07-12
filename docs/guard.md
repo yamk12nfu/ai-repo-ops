@@ -31,6 +31,35 @@ glob 評価は `picomatch`（`dot: true, nocase: true`。distribution の保護 
 `risk_level` → 適用 policy の対応は `low` → `low-risk.yaml` / `medium` → `default.yaml` /
 `high` → `security.yaml`（`.ai/managed/policies/`）。
 
+## 正規 `aro sync` bundle の認証
+
+lock file の変更を含む PR では、guard は正規の `aro sync` が作る変更だけを限定的に認証する。
+これは「CLI を実行した事実」の証明ではなく、次の入力から再現した最終状態との一致検証である。
+
+```txt
+merge-base の対象file + merge-base lock + authoritative distribution
+  → buildSyncPlan / applyPlan を一時snapshot上で再実行
+  → 期待される全writeをHEADのraw bytes + Git modeと比較
+```
+
+- distribution 名は PR HEAD や CLI の `--distribution` ではなく、merge-base lock から固定する。
+- source は guard 実行者が与える信頼入力。中央 reusable workflow は同workflow commitのengineを
+  `.aro-engine`へcheckoutし、`--source .aro-engine`を明示する。別revisionへのfallbackはしない。
+- HEAD lockから入力に使うのは、正規ISO UTC形式の`updated_at`だけ。他のfieldはmerge-base lockと
+  distributionから再生成し、lock全体をbytes単位で比較する。
+- managed update/create、create_only seed、append patch、lock-only syncを同じbundleとして扱う。
+- 期待fileの欠落、部分commit、余分なpatch内容、偽造lock、内容差、削除、実行bit差、symlink/gitlinkが
+  1件でもあればbundle全体を不認証にする。部分的なpath認証はしない。
+- bundle外の通常変更を同じPRへ含めることはできるが、従来どおり全guard ruleで検査する。
+
+認証されたpathで免除するのは`managed_file`と`outside_allowed_paths`だけである。
+`forbidden_path`、`workflow`、`project_config`、`too_many_files`、`too_many_added_lines`は免除しない。
+したがって、中央syncがworkflow seedを新規作成した場合でもworkflow built-inはfailし、policy更新を
+含むPR自身も必ずmerge-base側policyで検証される。
+
+認証不一致はunexpected errorにせず、trusted pathを0件として通常のmanaged/allowed違反へ戻す。
+sourceの読込不能やGit操作失敗など、検証基盤そのものが成立しない場合は従来どおりexit 3でfail-closedする。
+
 ## 検証ルールは merge-base 側から読む（自己改変の防止）
 
 guard は `.ai/project.yaml` と policy を **PR HEAD（working tree）ではなく、`--base` と HEAD の
@@ -66,6 +95,16 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
   "command": "guard",
   "ok": false,
   "base": "main",
+  "trustedSync": {
+    "status": "rejected",
+    "reason": "content_mismatch",
+    "expectedPaths": [".ai/managed/prompts/review.md", ".ai/ai-repo-ops.lock.yaml"],
+    "authority": {
+      "distribution": "base",
+      "version": "0.2.0",
+      "contentSha256": "..."
+    }
+  },
   "report": {
     "violations": [
       { "kind": "forbidden_path", "path": "secrets/key.pem", "message": "..." }
@@ -76,7 +115,9 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
 }
 ```
 
-違反一覧・件数を機械可読で返す（CI の step summary 生成や将来の telemetry から利用する想定）。
+違反一覧・件数とtrusted sync認証結果を機械可読で返す（CI の step summary 生成や将来の telemetry から
+利用する想定）。`authenticated`だけが信頼済みの`paths`を持つ。`rejected`は再現時の
+`expectedPaths`を持つが信頼済みpathは持たず、`not_applicable`は`status`と`reason`だけを返す。
 
 ## CI での利用
 

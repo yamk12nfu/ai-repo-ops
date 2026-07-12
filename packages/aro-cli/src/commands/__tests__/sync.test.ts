@@ -9,11 +9,13 @@ import { canonicalSha256OfString } from "../../core/checksum.js";
 import { LOCKFILE_RELATIVE_PATH, parseLockFile } from "../../core/lockfile.js";
 import { loadDistribution } from "../../core/source.js";
 import {
+  addRepoNameTemplateSeed,
   FIXED_TS,
   initGitRepo,
   makeTempDir,
   REVIEW_CONTENT,
   REVIEW_REL,
+  REPO_NAME_TEMPLATE_DEST,
   seedRepoAsSynced,
   setupBaseDistribution,
   WORKFLOW_REL,
@@ -255,6 +257,45 @@ describe("executeSync: seed だけ drift（§10.6）", () => {
     expect(await read(WORKFLOW_DEST)).toBe("name: AI Review\n");
     // diff は up to date。
     expect((await runDiff()).code).toBe(0);
+  });
+});
+
+describe("executeSync: template context", () => {
+  it("既存repoではdirectory名でなくproject.nameを新規template seedへ渡す", async () => {
+    await setupBaseDistribution(sourceRoot);
+    await seedSynced();
+    await writeRaw(
+      repoRoot,
+      PROJECT_YAML,
+      "project:\n  name: demo\n  risk_level: medium\n",
+    );
+    await addRepoNameTemplateSeed(sourceRoot);
+
+    const code = await executeSync(options(), captureIo().io);
+
+    expect(code).toBe(SYNC_EXIT.ok);
+    expect(await read(REPO_NAME_TEMPLATE_DEST)).toBe("demo\n");
+    expect(await read(REPO_NAME_TEMPLATE_DEST)).not.toContain(path.basename(repoRoot));
+  });
+
+  it.each([
+    ["missing", null],
+    ["invalid", "project: [broken\n"],
+    ["name absent", "project:\n  risk_level: medium\n"],
+  ])("project.yamlが%sならdirectory名へfallbackする", async (_case, projectYaml) => {
+    await setupBaseDistribution(sourceRoot);
+    await seedSynced();
+    if (projectYaml === null) {
+      await rm(path.join(repoRoot, PROJECT_YAML));
+    } else {
+      await writeRaw(repoRoot, PROJECT_YAML, projectYaml);
+    }
+    await addRepoNameTemplateSeed(sourceRoot);
+
+    const code = await executeSync(options(), captureIo().io);
+
+    expect(code).toBe(SYNC_EXIT.ok);
+    expect(await read(REPO_NAME_TEMPLATE_DEST)).toBe(`${path.basename(repoRoot)}\n`);
   });
 });
 

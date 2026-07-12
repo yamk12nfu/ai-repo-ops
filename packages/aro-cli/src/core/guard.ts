@@ -78,6 +78,8 @@ export interface RunGuardInput {
   changedFiles: readonly GuardChangedFile[];
   projectConfig: ProjectConfig;
   policy: Policy;
+  /** authoritative な sync 結果と完全一致すると認証された path。 */
+  trustedSyncPaths?: ReadonlySet<string> | undefined;
 }
 
 /** glob pattern 1 件分の matcher。 */
@@ -128,8 +130,13 @@ interface GuardMatchers {
  * 同一ファイルが複数 kind に該当する場合（例: `.github/workflows/**` が policy の forbidden_paths にも
  * 列挙されている場合、forbidden_path と workflow の 2 件になる）でも重複除去せずそれぞれ報告する。
  */
-function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolation[] {
+function checkFile(
+  file: GuardChangedFile,
+  matchers: GuardMatchers,
+  trustedSyncPaths: ReadonlySet<string> | undefined,
+): GuardViolation[] {
   const violations: GuardViolation[] = [];
+  const isTrustedSyncPath = trustedSyncPaths?.has(file.path) === true;
 
   const forbiddenHit = firstMatch(matchers.forbidden, file.path);
   if (forbiddenHit !== undefined) {
@@ -140,7 +147,7 @@ function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolat
     });
   }
 
-  if (firstMatch(matchers.managed, file.path) !== undefined) {
+  if (!isTrustedSyncPath && firstMatch(matchers.managed, file.path) !== undefined) {
     violations.push({
       kind: "managed_file",
       path: file.path,
@@ -164,7 +171,11 @@ function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolat
     });
   }
 
-  if (matchers.allowed !== undefined && firstMatch(matchers.allowed, file.path) === undefined) {
+  if (
+    !isTrustedSyncPath &&
+    matchers.allowed !== undefined &&
+    firstMatch(matchers.allowed, file.path) === undefined
+  ) {
     violations.push({
       kind: "outside_allowed_paths",
       path: file.path,
@@ -193,7 +204,7 @@ function checkFile(file: GuardChangedFile, matchers: GuardMatchers): GuardViolat
  * 返す純粋関数）。
  */
 export function runGuard(input: RunGuardInput): GuardReport {
-  const { changedFiles, projectConfig, policy } = input;
+  const { changedFiles, projectConfig, policy, trustedSyncPaths } = input;
 
   const forbiddenPatterns = [
     ...(projectConfig.ai?.forbidden_paths ?? []),
@@ -211,7 +222,7 @@ export function runGuard(input: RunGuardInput): GuardReport {
 
   const violations: GuardViolation[] = [];
   for (const file of changedFiles) {
-    violations.push(...checkFile(file, matchers));
+    violations.push(...checkFile(file, matchers, trustedSyncPaths));
   }
 
   const checkedFiles = changedFiles.length;

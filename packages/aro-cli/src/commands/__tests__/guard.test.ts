@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { chmod, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -6,42 +6,30 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { executeGuard, GUARD_EXIT, type GuardIo, type GuardOptions } from "../guard.js";
 import { executeInit, type InitIo } from "../init.js";
+import { readFileAtRevision } from "../../core/git-diff.js";
+import { LOCKFILE_RELATIVE_PATH } from "../../core/lockfile.js";
 import { resolveSourceRoot } from "../../core/source.js";
-import { makeTempDir, writeRaw } from "../../test-support/distribution.fixture.js";
+import {
+  DEFAULT_MANIFEST,
+  makeTempDir,
+  POLICY_REL,
+  REVIEW_REL,
+  setupBaseDistribution,
+  TEMPLATE_REL,
+  writeRaw,
+} from "../../test-support/distribution.fixture.js";
 import { gitCheckoutNewBranch, gitCommitAll, initRealGitRepo } from "../../test-support/git.fixture.js";
+import {
+  createSyncAuthenticationFixture,
+  SYNC_FIXTURE_POLICY_DEFAULT as POLICY_DEFAULT,
+  SYNC_FIXTURE_PROJECT_YAML as PROJECT_YAML,
+  SYNC_FIXTURE_REVIEW_DEST as REVIEW_DEST,
+  type SyncAuthenticationFixture,
+} from "../../test-support/sync-authentication.fixture.js";
 
 let repoRoot: string;
 
 const NOW = "2026-07-01T12:00:00.000Z";
-
-/** guard 単体テスト用の project.yaml（risk_level: medium → policies/default.yaml が適用される）。 */
-const PROJECT_YAML = `schema_version: 1
-project:
-  name: demo
-  type: generic
-  risk_level: medium
-commands:
-  lint: ""
-quality_gates:
-  required: []
-ai:
-  max_changed_files: 3
-  allowed_paths:
-    - "src/**"
-review:
-  require_human_review: true
-evals: {}
-`;
-
-/** guard 単体テスト用の policy（.ai/managed/policies/default.yaml。medium risk_level に対応）。 */
-const POLICY_DEFAULT = `schema_version: 1
-name: default
-change_limits:
-  max_changed_files: 10
-  max_added_lines: 5
-forbidden_paths:
-  - "secrets/**"
-`;
 
 beforeEach(async () => {
   repoRoot = await makeTempDir("aro-guard-cmd-");
@@ -413,5 +401,315 @@ describe("executeGuard: 実 distribution/base に対するエンドツーエン�
       "outside_allowed_paths",
       "workflow",
     ]);
+  });
+});
+
+describe("executeGuard: trusted aro sync", () => {
+  async function withInstalledSync(
+    assertion: (syncFixture: SyncAuthenticationFixture) => Promise<void>,
+  ): Promise<void> {
+    const syncFixture = await createSyncAuthenticationFixture({ repoRoot });
+    try {
+      await assertion(syncFixture);
+    } finally {
+      await syncFixture.cleanup();
+    }
+  }
+
+  async function withManagedSync(
+    assertion: (syncFixture: SyncAuthenticationFixture) => Promise<void>,
+  ): Promise<void> {
+    await withInstalledSync(async (syncFixture) => {
+      await syncFixture.prepareManagedSync();
+      await assertion(syncFixture);
+    });
+  }
+
+  it("authoritative sourceから生成されたmanaged update + lockを認証してexit 0にする", async () => {
+    await withManagedSync(async (syncFixture) => {
+      await syncFixture.commit();
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.ok);
+      expect(JSON.parse(cap.out())).toMatchObject({
+        ok: true,
+        trustedSync: {
+          status: "authenticated",
+          reason: "exact_match",
+          paths: [REVIEW_DEST, LOCKFILE_RELATIVE_PATH],
+        },
+        report: { violations: [] },
+      });
+    });
+  });
+
+  it("認証拒否時は通常のmanaged違反へ戻すcommand glue", async () => {
+    await withManagedSync(async (syncFixture) => {
+      await writeRaw(repoRoot, LOCKFILE_RELATIVE_PATH, "broken: [\n");
+      await syncFixture.commit("chore: tamper aro sync lock");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.violations);
+      const parsed = JSON.parse(cap.out()) as {
+        ok: boolean;
+        trustedSync: { status: string; reason: string };
+        report: { violations: Array<{ kind: string; path?: string }> };
+      };
+      expect(parsed.ok).toBe(false);
+      expect(parsed.trustedSync).toMatchObject({
+        status: "rejected",
+        reason: "head_lock_invalid",
+      });
+      expect(parsed.trustedSync).not.toHaveProperty("paths");
+      expect(parsed.report.violations).toContainEqual(
+        expect.objectContaining({ kind: "managed_file", path: REVIEW_DEST }),
+      );
+    });
+  });
+
+  it("lock変更を欠くpartial syncは認証対象外として通常検証する", async () => {
+    await withManagedSync(async (syncFixture) => {
+      const baseLock = await readFileAtRevision(
+        repoRoot,
+        syncFixture.mergeBaseSha,
+        LOCKFILE_RELATIVE_PATH,
+      );
+      expect(baseLock).not.toBeNull();
+      await writeRaw(repoRoot, LOCKFILE_RELATIVE_PATH, baseLock ?? "");
+      await syncFixture.commit("chore: commit partial aro sync");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.violations);
+      const parsed = JSON.parse(cap.out()) as {
+        trustedSync: { status: string; reason: string };
+        report: { violations: Array<{ kind: string; path?: string }> };
+      };
+      expect(parsed.trustedSync).toMatchObject({
+        status: "not_applicable",
+        reason: "lock_unchanged",
+      });
+      expect(parsed.trustedSync).not.toHaveProperty("paths");
+      expect(parsed.report.violations).toContainEqual(
+        expect.objectContaining({ kind: "managed_file", path: REVIEW_DEST }),
+      );
+    });
+  });
+
+  it("正規syncとallowed pathの通常変更を含むmixed PRを許可する", async () => {
+    await withManagedSync(async (syncFixture) => {
+      await writeRaw(repoRoot, "src/index.ts", "export const value = 1;\n");
+      await gitCommitAll(repoRoot, "chore: aro sync with regular change");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.ok);
+      expect(JSON.parse(cap.out())).toMatchObject({
+        trustedSync: { status: "authenticated" },
+        report: { violations: [] },
+      });
+    });
+  });
+
+  it("trusted sync pathも変更ファイル数へ数え、change limitは免除しない", async () => {
+    await withManagedSync(async (syncFixture) => {
+      await writeRaw(repoRoot, "src/a.ts", "export const a = 1;\n");
+      await writeRaw(repoRoot, "src/b.ts", "export const b = 2;\n");
+      await gitCommitAll(repoRoot, "chore: aro sync over change limit");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.violations);
+      const parsed = JSON.parse(cap.out()) as {
+        trustedSync: { status: string };
+        report: { violations: Array<{ kind: string }> };
+      };
+      expect(parsed.trustedSync.status).toBe("authenticated");
+      expect(parsed.report.violations).toContainEqual(
+        expect.objectContaining({ kind: "too_many_files" }),
+      );
+    });
+  });
+
+  it("syncでpolicyを緩めても同じPRはmerge-base側policyで検証する", async () => {
+    await withInstalledSync(async (syncFixture) => {
+      await writeRaw(
+        syncFixture.sourceRoot,
+        POLICY_REL,
+        POLICY_DEFAULT.replace('  - "secrets/**"', '  - "private/**"'),
+      );
+      await syncFixture.sync();
+      await writeRaw(repoRoot, "secrets/token.txt", "forbidden\n");
+      await gitCommitAll(repoRoot, "chore: relax policy via sync and add forbidden file");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.violations);
+      const parsed = JSON.parse(cap.out()) as {
+        trustedSync: { status: string };
+        report: { violations: Array<{ kind: string; path?: string }> };
+      };
+      expect(parsed.trustedSync.status).toBe("authenticated");
+      expect(parsed.report.violations).toContainEqual(
+        expect.objectContaining({ kind: "forbidden_path", path: "secrets/token.txt" }),
+      );
+    });
+  });
+
+  it("authoritative syncがworkflow seedを作成してもworkflow built-inは免除しない", async () => {
+    await withInstalledSync(async (syncFixture) => {
+      const manifestWithWorkflowSeed = DEFAULT_MANIFEST.replace(
+        "patches:\n",
+        [
+          "  - src: files/.github/workflows/extra.yml",
+          "    dest: .github/workflows/extra.yml",
+          "    strategy: create_only",
+          "patches:",
+          "",
+        ].join("\n"),
+      );
+      await writeRaw(
+        syncFixture.sourceRoot,
+        "distribution/base/manifest.yaml",
+        manifestWithWorkflowSeed,
+      );
+      await writeRaw(
+        syncFixture.sourceRoot,
+        "distribution/base/files/.github/workflows/extra.yml",
+        "name: Extra\n",
+      );
+      await syncFixture.sync();
+      await gitCommitAll(repoRoot, "chore: create workflow seed via aro sync");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.violations);
+      const parsed = JSON.parse(cap.out()) as {
+        trustedSync: { status: string };
+        report: { violations: Array<{ kind: string; path?: string }> };
+      };
+      expect(parsed.trustedSync.status).toBe("authenticated");
+      expect(parsed.report.violations).toContainEqual(
+        expect.objectContaining({ kind: "workflow", path: ".github/workflows/extra.yml" }),
+      );
+    });
+  });
+
+  it("別sourceで生成した内部整合済みsyncをauthoritative sourceとして認証しない", async () => {
+    const untrustedSource = await makeTempDir("aro-guard-untrusted-src-");
+    try {
+      await withInstalledSync(async (syncFixture) => {
+        await setupBaseDistribution(untrustedSource);
+        await writeRaw(untrustedSource, POLICY_REL, POLICY_DEFAULT);
+        await writeRaw(untrustedSource, TEMPLATE_REL, PROJECT_YAML);
+        await writeRaw(untrustedSource, REVIEW_REL, "# Untrusted source prompt\n");
+        await syncFixture.sync({ sourceRoot: untrustedSource });
+        await gitCommitAll(repoRoot, "chore: sync from untrusted source");
+
+        const cap = captureIo();
+        const code = await executeGuard(
+          options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+          cap.io,
+        );
+
+        expect(code).toBe(GUARD_EXIT.violations);
+        expect(JSON.parse(cap.out())).toMatchObject({
+          trustedSync: { status: "rejected", reason: "sync_not_required" },
+        });
+      });
+    } finally {
+      await rm(untrustedSource, { recursive: true, force: true });
+    }
+  });
+
+  it("managed fileのmodeだけを変更してもmanaged_file違反として検出する", async () => {
+    await withInstalledSync(async (syncFixture) => {
+      await chmod(path.join(repoRoot, REVIEW_DEST), 0o755);
+      await gitCommitAll(repoRoot, "chore: chmod managed file");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: true }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.violations);
+      const parsed = JSON.parse(cap.out()) as {
+        report: { violations: Array<{ kind: string; path?: string }> };
+      };
+      expect(parsed.report.violations).toContainEqual(
+        expect.objectContaining({ kind: "managed_file", path: REVIEW_DEST }),
+      );
+    });
+  });
+
+  it("human出力にtrusted syncの認証状態とpath数を表示する", async () => {
+    await withManagedSync(async (syncFixture) => {
+      await gitCommitAll(repoRoot, "chore: aro sync for human output");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({ base: "main", source: syncFixture.sourceRoot, json: false }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.ok);
+      expect(cap.out()).toContain("Trusted sync: authenticated (2 paths)");
+    });
+  });
+
+  it("認証するdistribution名はHEAD optionでなくmerge-base lockから固定する", async () => {
+    await withManagedSync(async (syncFixture) => {
+      await gitCommitAll(repoRoot, "chore: aro sync with ignored distribution option");
+
+      const cap = captureIo();
+      const code = await executeGuard(
+        options({
+          base: "main",
+          source: syncFixture.sourceRoot,
+          distribution: "attacker-selected",
+          json: true,
+        }),
+        cap.io,
+      );
+
+      expect(code).toBe(GUARD_EXIT.ok);
+      expect(JSON.parse(cap.out())).toMatchObject({
+        trustedSync: {
+          status: "authenticated",
+          authority: { distribution: "base" },
+        },
+      });
+    });
   });
 });
