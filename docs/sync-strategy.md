@@ -126,6 +126,18 @@ Suggested recovery:
 
 既存ファイル（tracked。`update` で書き換えた分）は `git restore`、新規作成ファイル（`create` で書いた分）は `rm -f` で削除して復旧する。`touchedPaths`（書き込みを試みた全 path）を `newPaths`（新規作成分）で振り分け、この 2 種類のコマンドに分けて案内する（`formatApplyIoError`。path は `shellQuote` でクォートするため、空白を含む path でも壊れない）。**`aro init` 直後は生成物を一度 commit してから次の `aro sync` を実行することを推奨する** — 未 commit のまま I/O 失敗が起きると `git restore` で戻せないことがある。
 
+## guard によるsync結果の再現認証
+
+`aro sync`で適用した変更をPRへcommitすると、lockを含むため通常のguardではmanaged変更として見える。
+guardはmerge-baseからdistributionの対象pathだけを一時snapshotへ復元し、この章の
+`buildSyncPlan` / `applyPlan`をそのまま再実行する。期待された全writeがHEADのraw bytesとGit modeに
+完全一致した場合だけ、bundle全体をtrusted syncとして認証する。
+
+この認証はlock内の`installed_sha256`を単独では信頼しない。PR作者はmanaged内容とlock checksumを同時に
+書き換えられるため、それだけでは自己署名になる。期待値の正はmerge-base lockと、CIがworkflow自身と
+同commitからcheckoutしたauthoritative distributionである。詳細な免除範囲とfailure時の扱いは
+[`guard.md`](./guard.md)を参照。
+
 ## managed file を直接編集してしまった場合の復旧
 
 `.ai/managed/**` は `aro` が管理し、人間は直接編集しない。誤って編集すると conflict になる。復旧手順:

@@ -90,10 +90,10 @@ jobs:
           # この reusable workflow 自身と同じ repo・同じ commit の CLI を使う（workflow と
           # エンジンのバージョン一致を保証）。job.workflow_repository / job.workflow_sha は
           # 「このジョブを定義する workflow ファイル」の repo と commit SHA（公式 docs が
-          # reusable workflow の自己 checkout に示す組み合わせ）。取得できない環境（GHES 等）
-          # では中央 repo の v1（この workflow が配布される互換ライン）へフォールバック。
-          repository: ${{ job.workflow_repository || 'yamk12nfu/ai-repo-ops' }}
-          ref: ${{ job.workflow_sha || 'v1' }}
+          # reusable workflow の自己 checkout に示す組み合わせ）。取得できない環境では
+          # 別revisionへfallbackせずcheckoutを失敗させ、認証sourceを曖昧にしない。
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
           path: .aro-engine
           persist-credentials: false
 
@@ -120,7 +120,7 @@ jobs:
         run: |
           set +e
           node .aro-engine/packages/aro-cli/dist/cli.js guard \
-            --repo . --base "origin/$BASE_REF" --json \
+            --repo . --base "origin/$BASE_REF" --source .aro-engine --json \
             > "$ARTIFACTS_DIR/guard-result.json" 2> "$ARTIFACTS_DIR/guard-error.json"
           code=$?
           set -e
@@ -259,6 +259,12 @@ jobs:
               echo "- 状態: **error**（guard exit: ${GUARD_EXIT:-unknown}）— job log を参照"
             fi
             echo "- config: \`$CONFIG_PATH\`"
+            if [ -s "$ARTIFACTS_DIR/guard-result.json" ]; then
+              trusted_status="$(jq -r '.trustedSync.status // "not_applicable"' "$ARTIFACTS_DIR/guard-result.json")"
+              trusted_reason="$(jq -r '.trustedSync.reason // "unknown"' "$ARTIFACTS_DIR/guard-result.json")"
+              trusted_count="$(jq -r 'if .trustedSync.status == "authenticated" then ((.trustedSync.paths // []) | length) else 0 end' "$ARTIFACTS_DIR/guard-result.json")"
+              echo "- Trusted sync: \`$trusted_status\`（reason: \`$trusted_reason\`, paths: $trusted_count）"
+            fi
 
             echo ""
             echo "## Repo Knowledge"

@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { ProjectConfigError } from "../errors.js";
-import { parseProjectConfig, parseProjectConfigValue } from "../project-config.js";
+import {
+  parseProjectConfig,
+  parseProjectConfigValue,
+  tryParseProjectName,
+} from "../project-config.js";
 
 describe("parseProjectConfigValue", () => {
   it("project.risk_level が enum 内なら成功し、ai 未設定でも通る", () => {
@@ -40,6 +44,28 @@ describe("parseProjectConfigValue", () => {
       evals: {},
     });
     expect(config.project.risk_level).toBe("medium");
+    expect(config.project.name).toBe("demo");
+  });
+
+  it("project.nameはoptional stringとして型検査する", () => {
+    expect(parseProjectConfigValue({ project: { risk_level: "medium" } }).project.name).toBeUndefined();
+    expect(() =>
+      parseProjectConfigValue({ project: { name: 42, risk_level: "medium" } }),
+    ).toThrowError(ProjectConfigError);
+  });
+});
+
+describe("tryParseProjectName", () => {
+  it("valid configからnameを返す", () => {
+    expect(tryParseProjectName("project:\n  name: demo\n  risk_level: medium\n")).toBe("demo");
+  });
+
+  it.each([
+    "project: [broken\n",
+    "project:\n  risk_level: medium\n",
+    "project:\n  name: demo\n  risk_level: extreme\n",
+  ])("不正またはname無しならundefinedを返す", (yaml) => {
+    expect(tryParseProjectName(yaml)).toBeUndefined();
   });
 });
 

@@ -34,6 +34,7 @@ export type RiskLevel = (typeof RISK_LEVELS)[number];
 /** `project` セクション。`risk_level` のみ guard に必要なため必須にし、他は通す。 */
 const projectSectionSchema = z
   .object({
+    name: z.string().min(1).optional(),
     risk_level: z.enum(RISK_LEVELS),
   })
   .passthrough();
@@ -108,4 +109,20 @@ export function parseProjectConfig(text: string, sourceRef?: string): ProjectCon
     });
   }
   return parseProjectConfigValue(parsed, sourceRef);
+}
+
+/**
+ * syncのtemplate context向けにproject.nameをbest-effortで読む。
+ * YAMLまたはguard用最小schemaが不正なら例外にせずundefinedを返し、callerが従来のdirectory名へ
+ * fallbackできるようにする。
+ */
+export function tryParseProjectName(text: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(text);
+  } catch {
+    return undefined;
+  }
+  const result = projectConfigSchema.safeParse(parsed);
+  return result.success ? result.data.project.name : undefined;
 }

@@ -101,6 +101,39 @@ describe("runGuard: managed files", () => {
       expect.objectContaining({ kind: "managed_file", path: LOCKFILE_RELATIVE_PATH }),
     ]);
   });
+
+  it("trusted sync path は managed_file / outside_allowed_paths のみ免除する", () => {
+    const trustedPath = ".ai/managed/prompts/review.md";
+    const input = {
+      changedFiles: [file(trustedPath)],
+      projectConfig: projectConfig({ allowedPaths: ["src/**"] }),
+      policy: policy(),
+      trustedSyncPaths: new Set([trustedPath]),
+    };
+
+    const report = runGuard(input);
+
+    expect(report.violations).toEqual([]);
+  });
+
+  it("trusted sync pathでもforbidden_pathは免除しない", () => {
+    const trustedPath = ".ai/managed/prompts/review.md";
+    const input = {
+      changedFiles: [file(trustedPath)],
+      projectConfig: projectConfig({
+        allowedPaths: ["src/**"],
+        forbiddenPaths: [".ai/managed/**"],
+      }),
+      policy: policy(),
+      trustedSyncPaths: new Set([trustedPath]),
+    };
+
+    const report = runGuard(input);
+
+    expect(report.violations).toEqual([
+      expect.objectContaining({ kind: "forbidden_path", path: trustedPath }),
+    ]);
+  });
 });
 
 describe("runGuard: workflows", () => {

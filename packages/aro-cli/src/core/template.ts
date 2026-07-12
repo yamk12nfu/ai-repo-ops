@@ -16,7 +16,7 @@ import path from "node:path";
 
 /** テンプレートに渡す変数。MVP では repo 名のみ。 */
 export interface TemplateContext {
-  /** 対象 repo の名前（通常は repo root のディレクトリ名）。 */
+  /** 対象 repo の名前（init時はdirectory名、既存repoではproject.name）。 */
   repo_name: string;
 }
 
@@ -52,4 +52,11 @@ export function renderTemplate(template: string, context: TemplateContext): stri
 export function deriveRepoName(repoRoot: string): string {
   const base = path.basename(repoRoot);
   return base.length > 0 ? base : "repo";
+}
+
+/** project.nameが使える場合は優先し、旧repoではdirectory名へfallbackする。 */
+export function resolveTemplateRepoName(repoRoot: string, projectName?: string): string {
+  return projectName === undefined || projectName.length === 0
+    ? deriveRepoName(repoRoot)
+    : projectName;
 }

@@ -101,6 +101,9 @@ base と HEAD の diff（merge-base 比較）を `.ai/project.yaml` と適用 po
 
 - 検証ルール（`project.yaml` / policy）は **merge-base 側の revision から読む**ため、PR 内で設定を
   緩めても迂回できない。`.ai/project.yaml` 自体の変更は `project_config` violation として必ず表面化する。
+- lock変更を含むPRでは、merge-baseの対象fileへ中央distributionのsyncを再実行し、HEADのraw bytes・
+  Git modeと完全一致するbundleだけをtrusted syncとして認証する。認証pathは`managed_file`と
+  `outside_allowed_paths`だけを免除し、forbidden/workflow/project_config/change limitsは維持する。
 - 終了コード: `0`=違反なし / `1`=違反あり / `3`=unexpected error（base に `project.yaml` が無い等）。
 - `--json` で違反一覧を機械可読出力。詳細は [`docs/guard.md`](./docs/guard.md) を参照。
 

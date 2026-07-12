@@ -21,6 +21,10 @@ export const POLICY_REL = "distribution/base/files/.ai/managed/policies/default.
 export const TEMPLATE_REL = "distribution/base/project.yaml.hbs";
 /** workflow stub（create_only seed）。 */
 export const WORKFLOW_REL = "distribution/base/files/.github/workflows/ai-review.yml";
+/** Stable repo-name rendering regression test用の追加seed template。 */
+export const REPO_NAME_TEMPLATE_REL = "distribution/base/repo-name.md.hbs";
+/** {@link REPO_NAME_TEMPLATE_REL} の出力先。 */
+export const REPO_NAME_TEMPLATE_DEST = "docs/repo-name.md";
 
 /** 既定の review.md 内容。 */
 export const REVIEW_CONTENT = "# Review prompt\n";
@@ -87,6 +91,16 @@ preserve:
   - .ai/project.yaml
   - .ai/local/**
 `;
+
+/** 既定distributionへ `{{ repo_name }}` を使うtemplate seedを追加する。 */
+export async function addRepoNameTemplateSeed(sourceRoot: string): Promise<void> {
+  const manifest = DEFAULT_MANIFEST.replace(
+    "patches:\n",
+    `  - dest: ${REPO_NAME_TEMPLATE_DEST}\n    template: repo-name.md.hbs\n    strategy: create_only\npatches:\n`,
+  );
+  await writeRaw(sourceRoot, REPO_NAME_TEMPLATE_REL, "{{ repo_name }}\n");
+  await writeRaw(sourceRoot, "distribution/base/manifest.yaml", manifest);
+}
 
 /**
  * authoritative project schema の source root からの相対 path（doctor が読む。計画 §0.1.5 / §17.4）。

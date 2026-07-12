@@ -148,6 +148,13 @@ export class GitDiffError extends AroError {
   }
 }
 
+/** Git tree entry / blob objectの読み取り・出力解釈に失敗したときのエラー。 */
+export class GitTreeError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}
+
 /** repo 固有 knowledge のindex・根拠・鮮度検証に失敗したときのエラー。 */
 export class KnowledgeError extends AroError {
   constructor(code: string, message: string, options: AroErrorOptions = {}) {

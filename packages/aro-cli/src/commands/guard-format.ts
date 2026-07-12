@@ -5,6 +5,7 @@
  * 色付けは diff-format.ts の {@link Palette} を再利用する（違反=conflict(赤) / 違反なし=add(緑)）。
  */
 import type { GuardReport, GuardViolation } from "../core/guard.js";
+import type { SyncAuthenticationReport } from "../core/sync-authentication.js";
 import { paletteFor, type Palette } from "./diff-format.js";
 
 /** {@link formatGuardHuman} のオプション。 */
@@ -12,6 +13,7 @@ export interface FormatGuardOptions {
   /** `--base` に指定した ref（見出しに表示する）。 */
   base: string;
   color: boolean;
+  trustedSync?: SyncAuthenticationReport | undefined;
 }
 
 /** 1 件の違反を 1〜2 行に整形する（limit/actual があれば次行に添える）。 */
@@ -34,6 +36,14 @@ export function formatGuardHuman(report: GuardReport, options: FormatGuardOption
   lines.push("");
   lines.push(`Base: ${options.base}`);
   lines.push("");
+
+  if (options.trustedSync?.status === "authenticated") {
+    lines.push(`Trusted sync: authenticated (${options.trustedSync.paths.length} paths)`);
+    lines.push("");
+  } else if (options.trustedSync?.status === "rejected") {
+    lines.push(`Trusted sync: rejected (${options.trustedSync.reason})`);
+    lines.push("");
+  }
 
   if (report.violations.length === 0) {
     lines.push(`${p.add("OK")}  no policy violations detected`);

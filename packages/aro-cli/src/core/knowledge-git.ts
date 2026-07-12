@@ -1,20 +1,21 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { KnowledgeError } from "./errors.js";
+import { GitTreeError, KnowledgeError } from "./errors.js";
+import {
+  FULL_GIT_OBJECT_ID_RE,
+  isRegularGitTreeEntry,
+  readTreeEntryAtRevision,
+  type GitTreeEntry,
+} from "./git-tree.js";
 import { assertSafeRelativePath } from "./paths.js";
 
 const execFileAsync = promisify(execFile);
 const GIT_MAX_BUFFER_BYTES = 64 * 1024 * 1024;
-const FULL_GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 
 export type KnowledgeCommitState = "missing" | "not-ancestor" | "ancestor";
 
-export interface KnowledgeGitTreeEntry {
-  mode: string;
-  type: string;
-  objectId: string;
-}
+export type KnowledgeGitTreeEntry = GitTreeEntry;
 
 export interface KnowledgeSourceGitState {
   commitState: KnowledgeCommitState;
@@ -60,30 +61,15 @@ async function treeEntryAt(
   sourcePath: string,
 ): Promise<KnowledgeGitTreeEntry | null> {
   try {
-    const result = await execFileAsync(
-      "git",
-      ["-C", repoRoot, "ls-tree", "-z", "--full-tree", treeish, "--", sourcePath],
-      {
-        encoding: "utf8",
-        maxBuffer: GIT_MAX_BUFFER_BYTES,
-      },
-    );
-    const record = result.stdout.endsWith("\0") ? result.stdout.slice(0, -1) : result.stdout;
-    if (record.length === 0) return null;
-    const match = /^(\d{6}) ([^ ]+) ([0-9a-f]+)\t/u.exec(record);
-    if (match === null) {
+    return await readTreeEntryAtRevision(repoRoot, treeish, sourcePath);
+  } catch (error) {
+    if (error instanceof GitTreeError && error.code === "GIT_TREE_PARSE") {
       throw new KnowledgeError(
         "KNOWLEDGE_GIT_TREE_FORMAT",
         `Git tree entryを解析できませんでした: ${sourcePath}`,
+        { cause: error },
       );
     }
-    return {
-      mode: match[1] ?? "",
-      type: match[2] ?? "",
-      objectId: match[3] ?? "",
-    };
-  } catch (error) {
-    if (error instanceof KnowledgeError) throw error;
     throw new KnowledgeError(
       "KNOWLEDGE_GIT_TREE_FAILED",
       `Git tree entryを取得できませんでした: ${sourcePath}`,
@@ -94,7 +80,7 @@ async function treeEntryAt(
 
 /** knowledge sourceに許可する通常ファイルのGit tree entryかを返す。 */
 export function isRegularKnowledgeSourceEntry(entry: KnowledgeGitTreeEntry): boolean {
-  return entry.type === "blob" && (entry.mode === "100644" || entry.mode === "100755");
+  return isRegularGitTreeEntry(entry);
 }
 
 async function isAncestorOfHead(repoRoot: string, commit: string): Promise<boolean> {
@@ -136,7 +122,7 @@ export async function inspectKnowledgeSourceGit(
   verifiedAtCommit: string,
 ): Promise<KnowledgeSourceGitState> {
   const safeSourcePath = assertSafeRelativePath(sourcePath, "knowledge source path");
-  if (!FULL_GIT_SHA_RE.test(verifiedAtCommit)) {
+  if (!FULL_GIT_OBJECT_ID_RE.test(verifiedAtCommit)) {
     throw new KnowledgeError(
       "KNOWLEDGE_COMMIT_INVALID",
       `verified_at_commitが完全なlowercase Git SHAではありません: ${verifiedAtCommit}`,
