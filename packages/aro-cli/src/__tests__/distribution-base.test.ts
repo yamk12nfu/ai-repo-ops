@@ -62,6 +62,36 @@ const KNOWLEDGE_REFRESH_PROMPT = path.join(
   "prompts",
   "knowledge-refresh.md",
 );
+const IMPROVE_PROMPT = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".ai",
+  "managed",
+  "prompts",
+  "improve.md",
+);
+const ISSUE_FIX_PROMPT = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".ai",
+  "managed",
+  "prompts",
+  "issue-fix.md",
+);
+const REVIEW_PROMPT = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".ai",
+  "managed",
+  "prompts",
+  "review.md",
+);
 const TEMPLATE = path.join(REPO_ROOT, "distribution", "base", "project.yaml.hbs");
 const DISTRIBUTED_REVIEW_WORKFLOW = path.join(
   REPO_ROOT,
@@ -257,6 +287,64 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       readFile(MANAGED_KNOWLEDGE_SCHEMA_COPY, "utf8"),
     ]);
     expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
+  });
+
+  it("improve promptがprojectとpolicyのうち厳しい変更ファイル上限を案内する", async () => {
+    const prompt = await readFile(IMPROVE_PROMPT, "utf8");
+
+    expect(prompt).toContain(
+      "`ai.max_changed_files` と適用 policy の `change_limits.max_changed_files`",
+    );
+    expect(prompt).toContain("小さい方");
+  });
+
+  it("issue fix promptがclean worktreeを開始条件にする", async () => {
+    const prompt = await readFile(ISSUE_FIX_PROMPT, "utf8");
+
+    expect(prompt).toContain("`git status --short`");
+    expect(prompt).toContain("既存の未コミット変更がある場合");
+  });
+
+  it("issue fix promptがguardをquality gateとともに自己検証する", async () => {
+    const prompt = await readFile(ISSUE_FIX_PROMPT, "utf8");
+
+    expect(prompt).toContain("`aro guard --repo . --base origin/<default branch>`");
+    expect(prompt).toContain("`quality_gates.required`");
+  });
+
+  it("issue fix promptがprojectとpolicyのfile・line上限を案内する", async () => {
+    const prompt = await readFile(ISSUE_FIX_PROMPT, "utf8");
+
+    expect(prompt).toContain(
+      "`ai.max_changed_files` と適用 policy の `change_limits.max_changed_files`",
+    );
+    expect(prompt).toContain("小さい方");
+    expect(prompt).toContain("`change_limits.max_added_lines`");
+  });
+
+  it("knowledge refresh promptが既存knowledgeだけを状態確認用に読み取り許可する", async () => {
+    const prompt = await readFile(KNOWLEDGE_REFRESH_PROMPT, "utf8");
+
+    expect(prompt).toContain(
+      "既存Knowledgeの状態確認に限り、`.ai/local/knowledge/**` は読み取り専用で参照します",
+    );
+    expect(prompt).toContain("`.ai/**` の内容はknowledgeの根拠として使いません");
+  });
+
+  it("review promptがprojectとpolicyのforbidden pathを和集合で確認する", async () => {
+    const prompt = await readFile(REVIEW_PROMPT, "utf8");
+
+    expect(prompt).toContain(
+      "`ai.forbidden_paths` と適用 policy の `forbidden_paths` の和集合",
+    );
+  });
+
+  it("review promptがmanaged fileとlockfileの復旧を案内する", async () => {
+    const prompt = await readFile(REVIEW_PROMPT, "utf8");
+
+    expect(prompt).toContain("`.ai/ai-repo-ops.lock.yaml`");
+    expect(prompt).toContain("`git restore -- .ai/managed/ .ai/ai-repo-ops.lock.yaml`");
+    expect(prompt).toContain("`aro sync`");
   });
 
   it("knowledge refresh promptが安定した初回sourceとcommit後guardを案内する", async () => {

@@ -1,6 +1,6 @@
 schema_version: 1
 name: base
-version: 0.1.4
+version: 0.1.5
 
 files:
   - src: files/.ai/managed/prompts/review.md

@@ -10,13 +10,23 @@
   `commands` / `quality_gates` / `review`。
 - `.ai/managed/policies/*.yaml`: 適用ポリシー。
 
+## 制約（厳守）
+
+- 変更ファイル数は `ai.max_changed_files` と適用 policy の `change_limits.max_changed_files` の
+  小さい方以下、追加行数は適用 policy の `change_limits.max_added_lines` 以下に収める。
+
 ## 進め方
 
+0. `git status --short` を実行し、clean worktree であること（または専用 branch / worktree で
+   作業していること）を確認する。**既存の未コミット変更がある場合は、開発者に確認するまで
+   一切の変更・破棄を行わない。**
 1. Issue を再現・特定する。再現できない場合は、必要な情報を明記して修正を保留する。
 2. 根本原因を特定し、最小の変更で修正する。`ai.forbidden_paths` には触れない。
 3. 修正に対応するテスト（再現テスト → 修正で緑）を追加する。
-4. `quality_gates.required` のコマンドを実行し、緑であることを確認する。
-5. `ai.max_changed_files` を超える場合は分割を提案し、無理に 1 PR に詰め込まない。
+4. `git fetch origin <default branch>` の後に `aro guard --repo . --base origin/<default branch>` と
+   `quality_gates.required` のコマンドを実行し、両方が緑であることを確認する。
+5. guard 違反・gate 失敗を解消できない、または変更上限を超える場合は分割を提案し、
+   無理に 1 PR に詰め込まない。
 
 ## 出力
 
