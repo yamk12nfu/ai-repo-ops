@@ -24,7 +24,7 @@ aro guard --repo /path/to/your-repo --base main --json   # 機械可読出力
 | `workflow` | `.github/workflows/**` への変更（設定に依らない既定。workflow の自己書き換え禁止） |
 | `project_config` | `.ai/project.yaml` 自体への変更（下記「project_config の扱い」参照） |
 | `outside_allowed_paths` | `ai.allowed_paths` 定義時、そのいずれにも一致しない変更（未定義なら検査しない） |
-| `too_many_files` | 変更ファイル数が上限超過（`ai.max_changed_files` を優先、無ければ policy の `change_limits.max_changed_files`） |
+| `too_many_files` | 変更ファイル数が上限超過（`ai.max_changed_files` と policy の `change_limits.max_changed_files` の厳しい方） |
 | `too_many_added_lines` | 追加行数合計が policy の `change_limits.max_added_lines` を超過 |
 
 glob 評価は `picomatch`（`dot: true, nocase: true`。distribution の保護 path 判定と同じ規約）。
