@@ -411,6 +411,39 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     }
   });
 
+  it("配布するai-review workflowがPR番号単位で古い実行をキャンセルする", async () => {
+    const workflow = parseYaml(await readFile(DISTRIBUTED_REVIEW_WORKFLOW, "utf8"));
+
+    expect(isPlainObject(workflow)).toBe(true);
+    if (!isPlainObject(workflow)) return;
+
+    const concurrency = workflow["concurrency"];
+    expect(isPlainObject(concurrency)).toBe(true);
+    if (!isPlainObject(concurrency)) return;
+
+    expect(concurrency["group"]).toBe("ai-review-${{ github.event.pull_request.number }}");
+    expect(concurrency["cancel-in-progress"]).toBe(true);
+  });
+
+  it("配布するai-review workflowが未使用のAnthropic secretを転送しない", async () => {
+    const workflow = parseYaml(await readFile(DISTRIBUTED_REVIEW_WORKFLOW, "utf8"));
+
+    expect(isPlainObject(workflow)).toBe(true);
+    if (!isPlainObject(workflow)) return;
+
+    const jobs = workflow["jobs"];
+    expect(isPlainObject(jobs)).toBe(true);
+    if (!isPlainObject(jobs)) return;
+
+    const job = jobs["ai_review"];
+    expect(isPlainObject(job)).toBe(true);
+    if (!isPlainObject(job)) return;
+
+    const serializedJob = JSON.stringify(job);
+    expect(serializedJob).not.toContain("anthropic_api_key");
+    expect(serializedJob).not.toContain("ANTHROPIC_API_KEY");
+  });
+
   it("reusable workflowのaction runtimeと実行Node.jsを24へ移行する", async () => {
     const workflow = await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8");
 
@@ -461,12 +494,29 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(workflow).toContain('node-version: ["20", "24"]');
   });
 
-  it("配布するai-review workflowがlegacy secretを現行guard未使用として説明する", async () => {
-    const workflow = await readFile(DISTRIBUTED_REVIEW_WORKFLOW, "utf8");
+  it("reusable workflowがlegacy secretのoptionalな受け取り口を維持する", async () => {
+    const workflow = parseYaml(await readFile(REUSABLE_REVIEW_WORKFLOW, "utf8"));
 
-    expect(workflow).toContain("現行 guard はこの secret を使用しない");
-    expect(workflow).not.toContain("ANTHROPIC_API_KEY は対象 repo の Actions secrets に登録する");
-    expect(workflow).not.toContain("未登録・fork PR の場合、AI レビューは明示的に skip");
+    expect(isPlainObject(workflow)).toBe(true);
+    if (!isPlainObject(workflow)) return;
+
+    const on = workflow["on"];
+    expect(isPlainObject(on)).toBe(true);
+    if (!isPlainObject(on)) return;
+
+    const workflowCall = on["workflow_call"];
+    expect(isPlainObject(workflowCall)).toBe(true);
+    if (!isPlainObject(workflowCall)) return;
+
+    const secrets = workflowCall["secrets"];
+    expect(isPlainObject(secrets)).toBe(true);
+    if (!isPlainObject(secrets)) return;
+
+    const legacySecret = secrets["anthropic_api_key"];
+    expect(isPlainObject(legacySecret)).toBe(true);
+    if (!isPlainObject(legacySecret)) return;
+
+    expect(legacySecret["required"]).toBe(false);
   });
 
   it("reusable workflowがknowledge導入repoだけを検証し、knowledge変更PRではstrictにする", async () => {
