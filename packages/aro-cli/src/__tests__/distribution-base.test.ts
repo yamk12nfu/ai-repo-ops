@@ -322,6 +322,14 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(prompt).toContain("`change_limits.max_added_lines`");
   });
 
+  it("issue fix promptがprojectとpolicyのforbidden pathを和集合で変更禁止にする", async () => {
+    const prompt = await readFile(ISSUE_FIX_PROMPT, "utf8");
+
+    expect(prompt).toContain(
+      "`ai.forbidden_paths` と適用 policy の `forbidden_paths` の和集合には触れない",
+    );
+  });
+
   it("knowledge refresh promptが既存knowledgeだけを状態確認用に読み取り許可する", async () => {
     const prompt = await readFile(KNOWLEDGE_REFRESH_PROMPT, "utf8");
 
