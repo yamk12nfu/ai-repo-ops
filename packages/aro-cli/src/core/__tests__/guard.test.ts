@@ -224,7 +224,19 @@ describe("runGuard: allowed_paths", () => {
 });
 
 describe("runGuard: change_limits（変更ファイル数）", () => {
-  it("project.yaml の ai.max_changed_files を超えると too_many_files 違反", () => {
+  it("project.yaml より policy の max_changed_files が厳しい場合は policy の上限を使う", () => {
+    const report = runGuard({
+      changedFiles: Array.from({ length: 6 }, (_, i) => file(`file-${i}.ts`)),
+      projectConfig: projectConfig({ maxChangedFiles: 10 }),
+      policy: policy({ maxChangedFiles: 5 }),
+    });
+
+    expect(report.violations).toEqual([
+      expect.objectContaining({ kind: "too_many_files", limit: 5, actual: 6 }),
+    ]);
+  });
+
+  it("policy より厳しい project.yaml の ai.max_changed_files を超えると too_many_files 違反", () => {
     const report = runGuard({
       changedFiles: [file("a.ts"), file("b.ts"), file("c.ts")],
       projectConfig: projectConfig({ maxChangedFiles: 2 }),

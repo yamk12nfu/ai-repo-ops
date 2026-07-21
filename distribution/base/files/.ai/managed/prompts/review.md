@@ -16,10 +16,12 @@
    - `low`: 重大な問題に絞る。
    - `medium`: バグ・セキュリティ・可読性・テスト不足を指摘する。
    - `high`: 上記に加え、後方互換・移行・ロールバック手順まで確認する。
-2. `ai.forbidden_paths` に該当する変更が含まれていれば最優先で指摘する。
+2. project の `ai.forbidden_paths` と適用 policy の `forbidden_paths` の和集合に該当する変更が
+   含まれていれば最優先で指摘する。
 3. `quality_gates.required` のコマンドが緑であることを確認する。落ちている場合は merge 不可として扱う。
-4. `.ai/managed/**` への手編集が含まれていれば、managed file は直接編集禁止である旨を指摘し、
-   `git restore -- .ai/managed/<path>` と `aro sync` での復旧を案内する。
+4. `.ai/managed/**` または `.ai/ai-repo-ops.lock.yaml` への手編集が含まれていれば、直接編集禁止で
+   ある旨を指摘し、`git restore -- .ai/managed/ .ai/ai-repo-ops.lock.yaml` と `aro sync` での復旧を
+   案内する。
 
 ## レビュー観点
 

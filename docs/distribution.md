@@ -79,6 +79,8 @@ MVP の strategy は 3 つのみ。挙動の詳細（conflict 判定含む）は
   - `template`: Handlebars 的な `{{ repo_name }}` プレースホルダを repo 名で置換してから書き込む（`packages/aro-cli/src/core/template.ts`）。`init` ではrepo rootのディレクトリ名、既存repoへの`sync`では`.ai/project.yaml`の`project.name`を使う（設定が無い・不正な旧repoだけディレクトリ名へfallback）。プレースホルダ以外の内容はそのまま。
   - `src`: プレースホルダ置換なしでそのまま書き込む（workflow stub など）。
 
+`ai-review.yml` の初期値は、同じ trust domain 内で中央のレビュー済み更新を追従する `@v1` 参照であり、現行 guard が使わない secret は転送しない。中央 repo を別の trust domain とみなす high-risk consumer は、生成後の workflow をレビュー済みの完全な commit SHA へ固定し、更新も明示的な PR で行う。`create_only` なので、この repo 固有の trust policy は後続の `aro sync` で上書きされない。詳細は [`security.md`](./security.md) を参照。
+
 #### 配布終了した seed file の扱い
 
 `create_only` の seed を manifest から外しても、**既に seed 済みの repo からは消えない**

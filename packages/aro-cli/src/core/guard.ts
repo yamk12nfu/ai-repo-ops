@@ -197,7 +197,7 @@ function checkFile(
  *      ありうるが、検証ルールを定めるファイルのため他の違反と同じく exit 1 に倒し、人間が内容を確認して
  *      明示的に override する運用を要求する。docs/guard.md「project_config の扱い」参照）
  *   5. allowed_paths（project.yaml の `ai.allowed_paths` が定義されている場合のみ。未定義なら制限なし）
- *   6. change_limits（変更ファイル数の実効上限は project.yaml 優先・追加行数合計は policy のみ）
+ *   6. change_limits（変更ファイル数の実効上限は project.yaml / policy の厳しい方・追加行数合計は policy のみ）
  *
  * `projectConfig` / `policy` は呼び出し側（commands/guard.ts）が merge-base（PR からは書き換えられない
  * revision）から読んだ値を渡す前提。ここではその revision の違いを意識しない（同じ入力なら同じ結果を
@@ -228,9 +228,15 @@ export function runGuard(input: RunGuardInput): GuardReport {
   const checkedFiles = changedFiles.length;
   const addedLines = changedFiles.reduce((sum, f) => sum + (f.addedLines ?? 0), 0);
 
-  // 有効な max_changed_files: project.yaml (ai.max_changed_files) が優先、無ければ policy。
+  // 有効な max_changed_files: project.yaml と policy の両方にあれば、より厳しい上限を使う。
+  const projectMaxChangedFiles = projectConfig.ai?.max_changed_files;
+  const policyMaxChangedFiles = policy.change_limits?.max_changed_files;
   const effectiveMaxChangedFiles =
-    projectConfig.ai?.max_changed_files ?? policy.change_limits?.max_changed_files;
+    projectMaxChangedFiles === undefined
+      ? policyMaxChangedFiles
+      : policyMaxChangedFiles === undefined
+        ? projectMaxChangedFiles
+        : Math.min(projectMaxChangedFiles, policyMaxChangedFiles);
   if (effectiveMaxChangedFiles !== undefined && checkedFiles > effectiveMaxChangedFiles) {
     violations.push({
       kind: "too_many_files",

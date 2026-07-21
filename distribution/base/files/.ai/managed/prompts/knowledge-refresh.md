@@ -12,7 +12,10 @@
 ## 情報源
 
 - 現在のHEADでGit追跡されているローカルのテキストファイルだけを根拠にします。
-- repo root とすべての nested 階層にある `.env`、`.env.*`、`secrets/**`、`.git/**`、`.ai/**`、依存物、build生成物は読みません。
+- repo root とすべての nested 階層にある `.env`、`.env.*`、`secrets/**`、`.git/**`、`.ai/**`
+  （次項の既存Knowledgeを除く）、依存物、build生成物は読みません。
+- 既存Knowledgeの状態確認に限り、`.ai/local/knowledge/**` は読み取り専用で参照します。
+  `.ai/**` の内容はknowledgeの根拠として使いません。
 - network、GitHub Issue/PR、Slack、Notion、CIログなどの外部情報は使いません。
 - 推測を事実として記録しません。根拠を特定できない内容は提案に留めます。
 - 初回entryでは変化しにくい正式文書を優先し、個別タスク・作業ログ・日次生成物は、明示的に対象指定されない限り根拠から除外します。

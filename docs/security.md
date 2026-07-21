@@ -119,6 +119,8 @@ permissions:
 
 `.github/workflows/ai-review.yml` は `create_only` のため、既存 repo のファイルは `aro sync` では更新されない。既存 repo では同ファイルから `id-token: write` と `issues: write` を手動で削除し、上記2権限だけを残す。`aro doctor` は旧権限の残置を **WARN** として報告する。
 
+配布テンプレートの reusable workflow 参照は、中央 repo と同じ trust domain でレビュー済みの更新を追従するため `@v1` を使う。中央 repo を別の trust domain とみなす high-risk consumer は、対象 repo の `create_only` workflow でレビュー済みの完全な commit SHA（`@<40桁SHA>`）へ固定し、更新時も新しい SHA を明示した PR としてレビューする。`aro sync` はこの repo 固有の固定を上書きしない。
+
 `aro doctor` は次も検査する。
 
 ```txt
@@ -135,9 +137,9 @@ central reusable workflow（yamk12nfu/ai-repo-ops/.github/workflows/<file>）を
 
 - `workflow_call.secrets.anthropic_api_key` は v0.1.1 の旧エンジン（AI レビュー）との互換性契約として
   **受け取り口だけ残っている**（`required: false`）。guard エンジンは未設定でもそのまま実行する。
-- 配布側 `ai-review.yml` は `secrets: { anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} }` のように
-  明示的に渡す形を維持している（`secrets: inherit` は使わない方針。
-  `ai-repo-ops-implementation-plan-v3.md` §20.5）。値が空でも guard の動作には影響しない。
+- 新規配布する `ai-review.yml` は未使用の `ANTHROPIC_API_KEY` を reusable workflow へ渡さない。
+  既存 caller に `secrets.anthropic_api_key` が残っている場合も、その転送と対象 repo の Actions secret を
+  削除できる。後方互換のため reusable workflow 側の optional な受け取り口だけは維持する。
 - **fork PR でも guard は実行される**（secrets 不要のため）。ただし fork PR では `GITHUB_TOKEN` が
   read-only になるため、違反時の PR コメント投稿だけ失敗しうる（`continue-on-error` で無視し、
   判定自体は job の成否で伝わる）。
