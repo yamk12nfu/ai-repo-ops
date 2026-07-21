@@ -87,6 +87,7 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
 明示的に override（admin merge / check の手動承認）して merge する**。「注意喚起だけで merge 可能」
 にはしない（警告どまりだと設定変更が誰にも見られずに通りうるため）。警告レベル
 （`severity: warn | fail`）の導入は、運用してこの扱いが厳しすぎると分かった時点で検討する。
+対象 repo 側から見た具体的な確認・override 手順は [`onboarding.md`](./onboarding.md) を参照。
 
 ## `--json` 出力
 
