@@ -1,6 +1,6 @@
 {
   "name": "ai-repo-ops",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "AI運用基盤の標準装備を複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。",
