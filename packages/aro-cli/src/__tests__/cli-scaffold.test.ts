@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { ARO_CLI_VERSION, buildProgram } from "../main.js";
@@ -22,7 +25,16 @@ describe("aro CLI scaffold", () => {
 
   it("CLIバージョンを公開している", () => {
     expect(buildProgram().version()).toBe(ARO_CLI_VERSION);
-    expect(ARO_CLI_VERSION).toBe("0.2.0");
+  });
+
+  it("CLIバージョンが package.json と一致する", () => {
+    // 固定値でアサートすると bump 漏れを検出できない（0.2.0 のまま 2 リリース通過した）。
+    // package.json を独立に読み、導出元とのズレだけを検証する。
+    const pkgPath = fileURLToPath(new URL("../../package.json", import.meta.url));
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version: string };
+
+    expect(ARO_CLI_VERSION).toBe(pkg.version);
+    expect(ARO_CLI_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
   });
 
   it("diff は --detailed-exitcode オプションを持つ", () => {

@@ -1,3 +1,5 @@
+import { createRequire } from "node:module";
+
 import { Command } from "commander";
 
 import { registerInit } from "./commands/init.js";
@@ -7,8 +9,17 @@ import { registerDoctor } from "./commands/doctor.js";
 import { registerGuard } from "./commands/guard.js";
 import { registerKnowledge } from "./commands/knowledge.js";
 
-/** aro CLI のバージョン。manifest.version とは独立した CLI 自身のバージョン。 */
-export const ARO_CLI_VERSION = "0.2.0";
+/**
+ * aro CLI のバージョン。manifest.version とは独立した CLI 自身のバージョン。
+ *
+ * package.json から導出する。ハードコードするとリリース時の bump 漏れで
+ * `aro --version` だけが古い値を返す（実際に 0.2.0 のまま 2 リリース放置された）。
+ * `src/` と `dist/` はどちらも package root の 1 階層下にあるため、この相対 path は
+ * vitest（src 直接実行）と配布物（dist）の両方で同じ package.json を指す。
+ */
+export const ARO_CLI_VERSION: string = (
+  createRequire(import.meta.url)("../package.json") as { version: string }
+).version;
 
 /**
  * aro のコマンドツリーを構築する。
