@@ -12,8 +12,8 @@ aro guard --repo /path/to/your-repo --base main --json   # 機械可読出力
 - `--base <ref>` は必須。ブランチ名・タグ・commit SHA を渡せる。
 - 比較は **merge-base 比較**（`<base>...HEAD` 相当）。base branch が PR 作成後に進んでいても、
   PR 由来の変更だけが検証対象になる。
-- 終了コード: `0`=違反なし / `1`=違反あり / `3`=unexpected error（検証に必要な入力が読めない場合を含む。
-  `aro doctor` と同じ設計）。
+- 終了コード: `0`=`severity: fail` の違反なし（`warn` のみなら 0）/ `1`=`fail` の違反あり /
+  `3`=unexpected error（検証に必要な入力が読めない場合を含む。`aro doctor` と同じ設計）。
 
 ## 検証項目
 
@@ -30,6 +30,47 @@ aro guard --repo /path/to/your-repo --base main --json   # 機械可読出力
 glob 評価は `picomatch`（`dot: true, nocase: true`。distribution の保護 path 判定と同じ規約）。
 `risk_level` → 適用 policy の対応は `low` → `low-risk.yaml` / `medium` → `default.yaml` /
 `high` → `security.yaml`（`.ai/managed/policies/`）。
+
+## severity（`fail` / `warn`）
+
+violation kind ごとの扱いは、適用 policy の `severity` で定義する。`fail` は exit 1（CI の
+required check を落とす）、`warn` は報告のみで exit code に影響しない。**`severity` に無い kind と、
+`severity` を持たない policy は `fail` 扱い**（緩める側を既定にすると policy の配布漏れが
+検証の骨抜きに直結するため）。
+
+```yaml
+severity:
+  managed_file: fail
+  workflow: fail
+  project_config: fail
+  forbidden_path: fail
+  outside_allowed_paths: warn
+  too_many_files: warn
+  too_many_added_lines: warn
+```
+
+分ける理由は、検証項目の性格が 2 種類あるためである。
+
+- **不変条件**（`managed_file` / `workflow` / `project_config` / `forbidden_path`）— 誰が変更しても
+  危険なので、行為者を問わず `fail` にする
+- **AI の行動半径の制限**（`outside_allowed_paths` / `too_many_files` / `too_many_added_lines`）—
+  `allowed_paths` は定義上「AI が変更してよい path」であり、人間が書いた feature PR に required check
+  として課すのは定義の誤用である。実際、これが原因で override merge が常態化した（[issue #33]）
+
+配布時の既定は `default.yaml` / `low-risk.yaml` が上記のとおり、`security.yaml`（`risk_level: high`）は
+**すべて `fail`**。high リスク repo では変更範囲そのものが監査対象であり、人間の PR でも範囲逸脱は
+明示的な override を経るべきという判断による。この摩擦を避けたい repo は `risk_level` を `medium` に
+することで選択できる。
+
+`severity` は managed file である policy 側にあり、`.ai/project.yaml` からは変更できない。これは
+「project 設定は policy を緩められない」という既存の判断（`max_changed_files` は両者の厳しい方を採用）
+と同じ方針である。
+
+**AI に対する強制は CI ではなく AI の意思決定点で担保する。** 改善ループの AI は PR 作成前に
+`aro guard` を自己実行する義務があり（`.ai/managed/prompts/improve.md`）、そこでは `warn` も
+中止条件として扱う。加えて `review.require_human_review: true` により merge は常に人間が判断する。
+
+[issue #33]: https://github.com/yamk12nfu/ai-repo-ops/issues/33
 
 ## 正規 `aro sync` bundle の認証
 

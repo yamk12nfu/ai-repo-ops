@@ -13,6 +13,14 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ### Added
 
+- `aro guard` の violation に severity（`fail` / `warn`）を導入。適用 policy の `severity` で
+  kind ごとに定義し、`warn` は報告のみで exit code を落とさない。`severity` に無い kind と
+  severity 未対応 policy は従来どおり `fail`（後方互換）。
+  配布 policy の既定は不変条件（`managed_file` / `workflow` / `project_config` / `forbidden_path`）が
+  `fail`、AI の行動半径の制限（`outside_allowed_paths` / `too_many_files` / `too_many_added_lines`）が
+  `warn`。`security.yaml`（risk_level: high）はすべて `fail` を維持する。
+  人間が書いた feature PR が構造的に必ず fail し override merge が常態化していた問題への対応
+  （#33）。AI に対する強制は `improve.md` の自己検証（warn も中止条件）と人間レビューで担保する。
 - `docs/onboarding.md`: 対象 repo への導入手順を文書化。init 後の `.ai/project.yaml` 調整を
   標準ステップとし、`project_config` violation の override merge 手順を消費者視点で記載
   （dogfooding 2 repo 分の観測に基づく。issue #22 論点 2 への対応）。

@@ -10,6 +10,23 @@ change_limits:
   max_changed_files: 10
   max_added_lines: 400
 
+# violation ごとの扱い。fail は required check を落とし、warn は報告のみ行う。
+# 表に無い kind は fail 扱い。
+#
+# 不変条件（誰が変更しても危険なもの）は fail のまま維持する。
+# allowed_paths / change_limits は「AI が変更してよい範囲」を定める設定であり、
+# 人間が書いた feature PR にこれを required check として課すのは定義の誤用で、
+# override merge の常態化を招くため warn とする。AI に対する強制は
+# `.ai/managed/prompts/improve.md` の自己検証（警告も中止条件）と人間レビューで担保する。
+severity:
+  managed_file: fail
+  workflow: fail
+  project_config: fail
+  forbidden_path: fail
+  outside_allowed_paths: warn
+  too_many_files: warn
+  too_many_added_lines: warn
+
 review:
   require_human_review: true
   auto_merge: false

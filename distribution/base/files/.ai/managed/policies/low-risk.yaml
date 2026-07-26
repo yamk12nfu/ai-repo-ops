@@ -10,6 +10,16 @@ change_limits:
   max_changed_files: 25
   max_added_lines: 1000
 
+# violation ごとの扱い（default.yaml の説明を参照）。表に無い kind は fail 扱い。
+severity:
+  managed_file: fail
+  workflow: fail
+  project_config: fail
+  forbidden_path: fail
+  outside_allowed_paths: warn
+  too_many_files: warn
+  too_many_added_lines: warn
+
 review:
   require_human_review: true
   auto_merge: false

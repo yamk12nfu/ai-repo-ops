@@ -27,7 +27,12 @@ function projectConfig(
 
 /** テスト用 Policy を作る（policy.ts の zod schema を通す）。 */
 function policy(
-  input: { maxChangedFiles?: number; maxAddedLines?: number; forbiddenPaths?: string[] } = {},
+  input: {
+    maxChangedFiles?: number;
+    maxAddedLines?: number;
+    forbiddenPaths?: string[];
+    severity?: Record<string, "fail" | "warn">;
+  } = {},
 ): Policy {
   return parsePolicyValue({
     schema_version: 1,
@@ -37,6 +42,7 @@ function policy(
       ...(input.maxAddedLines !== undefined ? { max_added_lines: input.maxAddedLines } : {}),
     },
     ...(input.forbiddenPaths !== undefined ? { forbidden_paths: input.forbiddenPaths } : {}),
+    ...(input.severity !== undefined ? { severity: input.severity } : {}),
   });
 }
 
@@ -317,7 +323,14 @@ describe("runGuard: summary / hasViolations", () => {
       policy: policy(),
     });
     expect(report.hasViolations).toBe(false);
-    expect(report.summary).toEqual({ checkedFiles: 3, addedLines: 5, violationCount: 0 });
+    expect(report.hasFailures).toBe(false);
+    expect(report.summary).toEqual({
+      checkedFiles: 3,
+      addedLines: 5,
+      violationCount: 0,
+      failCount: 0,
+      warnCount: 0,
+    });
   });
 
   it("削除されたファイル（addedLines=0）も checkedFiles にはカウントされる", () => {
@@ -328,5 +341,64 @@ describe("runGuard: summary / hasViolations", () => {
     });
     expect(report.summary.checkedFiles).toBe(1);
     expect(report.summary.addedLines).toBe(0);
+  });
+});
+
+describe("runGuard: severity", () => {
+  const AI_SCOPE_WARN = {
+    outside_allowed_paths: "warn",
+    too_many_files: "warn",
+    forbidden_path: "fail",
+  } as const;
+
+  it("severity 未指定の policy では全 violation が fail（後方互換）", () => {
+    const report = runGuard({
+      changedFiles: [file("outside/a.ts", 1)],
+      projectConfig: projectConfig({ allowedPaths: ["src/**"] }),
+      policy: policy(),
+    });
+    expect(report.violations.map((v) => v.severity)).toEqual(["fail"]);
+    expect(report.hasFailures).toBe(true);
+  });
+
+  it("warn 指定の violation だけなら hasFailures は false（報告は残る）", () => {
+    const report = runGuard({
+      changedFiles: [file("outside/a.ts", 1), file("outside/b.ts", 1)],
+      projectConfig: projectConfig({ allowedPaths: ["src/**"] }),
+      policy: policy({ maxChangedFiles: 1, severity: AI_SCOPE_WARN }),
+    });
+
+    // outside_allowed_paths × 2 + too_many_files × 1 がすべて warn として残る。
+    expect(report.violations).toHaveLength(3);
+    expect(report.violations.every((v) => v.severity === "warn")).toBe(true);
+    expect(report.hasViolations).toBe(true);
+    expect(report.hasFailures).toBe(false);
+    expect(report.summary.warnCount).toBe(3);
+    expect(report.summary.failCount).toBe(0);
+  });
+
+  it("fail 指定の violation が 1 件でもあれば hasFailures は true", () => {
+    const report = runGuard({
+      changedFiles: [file("outside/a.ts", 1), file(".env", 1)],
+      projectConfig: projectConfig({ allowedPaths: ["src/**"], forbiddenPaths: [".env"] }),
+      policy: policy({ severity: AI_SCOPE_WARN }),
+    });
+
+    const forbidden = report.violations.filter((v) => v.kind === "forbidden_path");
+    expect(forbidden.map((v) => v.severity)).toEqual(["fail"]);
+    expect(report.hasFailures).toBe(true);
+    expect(report.summary.failCount).toBe(1);
+  });
+
+  it("表に無い kind は fail 扱いになる（緩める側を既定にしない）", () => {
+    const report = runGuard({
+      changedFiles: [file(PROJECT_YAML_PATH, 1)],
+      projectConfig: projectConfig({ allowedPaths: [".ai/**"] }),
+      policy: policy({ severity: { outside_allowed_paths: "warn" } }),
+    });
+
+    const projectConfigViolation = report.violations.find((v) => v.kind === "project_config");
+    expect(projectConfigViolation?.severity).toBe("fail");
+    expect(report.hasFailures).toBe(true);
   });
 });

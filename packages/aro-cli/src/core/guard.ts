@@ -17,7 +17,7 @@ import picomatch from "picomatch";
 
 import { LOCKFILE_RELATIVE_PATH } from "./lockfile.js";
 import { PROJECT_YAML_PATH } from "./manifest.js";
-import type { Policy } from "./policy.js";
+import type { GuardSeverity, Policy } from "./policy.js";
 import type { ProjectConfig } from "./project-config.js";
 
 /** 1 件の違反種別。 */
@@ -33,6 +33,11 @@ export type GuardViolationKind =
 /** 1 件の違反。 */
 export interface GuardViolation {
   kind: GuardViolationKind;
+  /**
+   * この違反の扱い（適用 policy の `severity` 由来）。
+   * `fail` は exit code 1（CI の required check を落とす）、`warn` は報告のみ。
+   */
+  severity: GuardSeverity;
   /** 違反対象の path（ファイル単位の違反のみ設定。change_limits 系違反には無い）。 */
   path?: string;
   /** 人間向けメッセージ（1 行）。 */
@@ -49,16 +54,36 @@ export interface GuardSummary {
   checkedFiles: number;
   /** 追加行数の合計（バイナリは 0 扱い）。 */
   addedLines: number;
-  /** 違反の総数。 */
+  /** 違反の総数（fail + warn）。 */
   violationCount: number;
+  /** severity=fail の違反数。 */
+  failCount: number;
+  /** severity=warn の違反数。 */
+  warnCount: number;
 }
 
 /** {@link runGuard} の結果。 */
 export interface GuardReport {
   violations: GuardViolation[];
   summary: GuardSummary;
-  /** 違反が 1 件でもあるか（exit code 判定に使う）。 */
+  /** 違反が 1 件でもあるか（severity を問わない）。 */
   hasViolations: boolean;
+  /** severity=fail の違反があるか（exit code 判定に使う）。 */
+  hasFailures: boolean;
+}
+
+/** severity 付与前の違反（内部表現）。 */
+type RawGuardViolation = Omit<GuardViolation, "severity">;
+
+/**
+ * 適用 policy から violation kind の severity を引く。
+ *
+ * policy に `severity` が無い場合や、対象 kind が表に無い場合は `fail`。
+ * severity 未対応の既存 policy がこれまでどおり動くようにするための既定である
+ * （緩める側をデフォルトにすると、policy の配布漏れが検証の骨抜きに直結する）。
+ */
+function severityFor(kind: GuardViolationKind, policy: Policy): GuardSeverity {
+  return policy.severity?.[kind] ?? "fail";
 }
 
 /**
@@ -134,8 +159,8 @@ function checkFile(
   file: GuardChangedFile,
   matchers: GuardMatchers,
   trustedSyncPaths: ReadonlySet<string> | undefined,
-): GuardViolation[] {
-  const violations: GuardViolation[] = [];
+): RawGuardViolation[] {
+  const violations: RawGuardViolation[] = [];
   const isTrustedSyncPath = trustedSyncPaths?.has(file.path) === true;
 
   const forbiddenHit = firstMatch(matchers.forbidden, file.path);
@@ -220,9 +245,9 @@ export function runGuard(input: RunGuardInput): GuardReport {
     allowed: allowedPatterns?.map(matcherFor),
   };
 
-  const violations: GuardViolation[] = [];
+  const rawViolations: RawGuardViolation[] = [];
   for (const file of changedFiles) {
-    violations.push(...checkFile(file, matchers, trustedSyncPaths));
+    rawViolations.push(...checkFile(file, matchers, trustedSyncPaths));
   }
 
   const checkedFiles = changedFiles.length;
@@ -238,7 +263,7 @@ export function runGuard(input: RunGuardInput): GuardReport {
         ? projectMaxChangedFiles
         : Math.min(projectMaxChangedFiles, policyMaxChangedFiles);
   if (effectiveMaxChangedFiles !== undefined && checkedFiles > effectiveMaxChangedFiles) {
-    violations.push({
+    rawViolations.push({
       kind: "too_many_files",
       message: `変更ファイル数が上限を超えています: ${checkedFiles} > ${effectiveMaxChangedFiles}`,
       limit: effectiveMaxChangedFiles,
@@ -249,7 +274,7 @@ export function runGuard(input: RunGuardInput): GuardReport {
   // max_added_lines は policy のみ（project.yaml に対応するフィールドが無いため）。
   const maxAddedLines = policy.change_limits?.max_added_lines;
   if (maxAddedLines !== undefined && addedLines > maxAddedLines) {
-    violations.push({
+    rawViolations.push({
       kind: "too_many_added_lines",
       message: `追加行数の合計が上限を超えています: ${addedLines} > ${maxAddedLines}`,
       limit: maxAddedLines,
@@ -257,9 +282,23 @@ export function runGuard(input: RunGuardInput): GuardReport {
     });
   }
 
+  // severity は policy から引いて最後に付与する（checkFile は policy を知らなくてよい）。
+  const violations: GuardViolation[] = rawViolations.map((violation) => ({
+    ...violation,
+    severity: severityFor(violation.kind, policy),
+  }));
+  const failCount = violations.filter((violation) => violation.severity === "fail").length;
+
   return {
     violations,
-    summary: { checkedFiles, addedLines, violationCount: violations.length },
+    summary: {
+      checkedFiles,
+      addedLines,
+      violationCount: violations.length,
+      failCount,
+      warnCount: violations.length - failCount,
+    },
     hasViolations: violations.length > 0,
+    hasFailures: failCount > 0,
   };
 }
