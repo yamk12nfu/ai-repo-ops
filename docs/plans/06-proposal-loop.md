@@ -105,8 +105,8 @@ sources:
   - path: src/api/client.ts
   - path: src/api/legacy-client.ts
 decision:
-  by: ""
-  reason: ""
+  by: ""      # status が open 以外では非空必須（判断した人間）
+  reason: ""  # rejected / superseded では非空必須
 ---
 
 ## 課題
@@ -127,8 +127,15 @@ decision:
 - `proposed_at_commit`: 根拠を確認した完全な lowercase Git SHA。knowledge の `verified_at_commit` と同じ検証を使う。
 - `sources[].path`: repo root からの正確な相対 path。knowledge と同じ安全境界（secret・`.git`・`.ai`・
   依存物・build 生成物・symlink・glob を拒否）。
-- `decision.reason`: `rejected` では必須。`accepted` では任意。**却下理由が次の提案の入力になる**ため、
-  「なぜやらないか」を書くことに最大の価値がある。
+- `decision.by`: `status` が `open` 以外（`accepted` / `rejected` / `done` / `superseded`）では
+  **非空必須**。判断した人間を記録する。
+- `decision.reason`: `rejected` / `superseded` では必須。`accepted` では任意。
+  **却下理由が次の提案の入力になる**ため、「なぜやらないか」を書くことに最大の価値がある。
+
+> **`decision.by` は本人性を保証しない**。自己申告のフィールドであり、AI が人間の名前を書くことも
+> 技術的には可能である。それでも必須にするのは、(1) 空欄のまま採否だけが変わっている提案を
+> `aro proposals check` が機械的に弾けること、(2) 誰の判断かを後から辿れることに記録としての
+> 価値があるためである。本人性の担保は `proposal_decision`（fail → 人間が override）が担う。
 
 > **index.yaml を持たない理由**: knowledge は `index.yaml` に集約しているが、提案は件数が増え続け、
 > 状態が変わり、複数 PR が並行して触る。単一 index は conflict の原因になるだけで、
@@ -139,9 +146,25 @@ decision:
 | 遷移 | 誰が | guard の扱い |
 |---|---|---|
 | （なし）→ `open` | AI（propose.md） | **違反にしない**（propose.md の正常な出力）。`aro proposals check` が schema と根拠を検証 |
+| **（なし）→ `open` 以外** | — | **`proposal_decision` violation（`fail`）**。新規ファイルの免除は `open` に限る（後述） |
 | `open` → `accepted` / `rejected` | **人間のみ** | `proposal_decision` violation（**`severity: fail`**） |
 | 任意 → `superseded` | **人間のみ** | 同上 |
 | `accepted` → `done` | AI（improve.md）または人間 | **違反にしない**（実装 PR の正常な出力）。実装を伴わない `done` 化は人間がレビューで却下する |
+| `accepted` のまま（実装を破棄） | AI（improve.md）または人間 | **違反にしない**。`status` は変えず、本文に破棄の記録だけを追記する（後述） |
+
+> **新規ファイルの免除を `open` に限る理由**: 「merge-base に存在しない新規提案は違反にしない」を
+> 全 status に適用すると、**最初から `status: accepted` のファイルを 1 個追加するだけで採否の検証を
+> まるごと迂回できる**。免除は `（なし）→ open` だけに限定し、新規追加された `accepted` /
+> `rejected` / `superseded` / `done` は `proposal_decision` として `fail` にする。
+> `done` を含めるのは、`accepted` を経ずに実装済みとして生やす経路も同じ穴だからである。
+
+> **実装を破棄したときに `accepted` → `open` へ戻さない理由**: 破棄されたのは**実装の試み**であって、
+> 人間が下した採用の判断ではない。`open` に戻すと採用判断の記録が消え、次の `propose.md` が
+> 同じ提案を新規に出しうる。したがって `status` は `accepted` のまま据え置き、本文の
+> 「リスク・見送る理由になりうる点」に破棄の日時・理由・その時点の HEAD を追記する。
+> **状態が変わらないため `proposal_decision` は発火せず、破棄の記録を含む PR は通常どおり通る。**
+> 採用そのものを取り下げる場合は、人間が `superseded`（または `rejected`）へ遷移させる。
+> これは人間のみの遷移であり `fail` する。
 
 機械は「誰が編集したか」を判別できない。したがってこれは**強制ではなく可視化**である。ただし
 「可視化」の強度は `.ai/project.yaml` の変更と揃える。すなわち採否の変更を含む PR は
@@ -177,7 +200,8 @@ aro proposals check --repo <path> [--strict] [--json]
 
 検証項目（knowledge check の実装を最大限流用する）:
 
-1. frontmatter が schema と意味制約に適合する（`rejected` なら `decision.reason` が非空、等）。
+1. frontmatter が schema と意味制約に適合する。特に `status` が `open` 以外なら `decision.by` が非空、
+   `rejected` / `superseded` なら `decision.reason` も非空。
 2. `id` が repo 内で一意。
 3. `sources[].path` が許可された正確な相対 path の UTF-8 text file で、HEAD に追跡されている。
 4. `proposed_at_commit` が存在し、HEAD の祖先である。
@@ -203,8 +227,10 @@ aro proposals check --repo <path> [--strict] [--json]
    - **merge-base 側と HEAD 側の 2 revision で、対象ファイルの frontmatter を読んで比較する機構**
      （`core/git-tree.ts` の blob 読み出しを利用する。判定ルールを merge-base から読む既存設計は維持）
    - 遷移の種類による場合分け（前掲の表）。少なくとも次を区別する:
-     - merge-base に存在しないファイル（新規提案）は違反にしない
+     - merge-base に存在しないファイルは、**`status: open` の場合に限り**違反にしない。
+       新規追加された `accepted` / `rejected` / `superseded` / `done` は `fail`（迂回経路を塞ぐ）
      - `accepted` → `done` は違反にしない
+     - `status` が変化していない編集（実装破棄の記録の追記など）は違反にしない
      - `open` → `accepted` / `rejected`、任意 → `superseded` を `fail` にする
    - frontmatter が壊れている・parse できない場合の扱い（`proposals check` の責務と重複させず、
      guard 側は「遷移が判定できない」として fail にする）
@@ -230,7 +256,8 @@ aro proposals check --repo <path> [--strict] [--json]
      従来どおり自分で小さな改善を選ぶ）。
    - stale な `accepted`（根拠が変わっている）は実装対象に選ばず、人間に再確認を促す。
    - 実装が guard + gates を通ったら、その提案を `done` にして同じ PR に含める。
-   - 破棄した場合は提案を `open` のまま残し、破棄理由を本文に追記する（提案自体は消さない）。
+   - 破棄した場合は提案を **`accepted` のまま据え置き**、本文に破棄の日時・理由・その時点の HEAD を
+     追記する（提案自体は消さない。`status` を戻さない理由は前掲の「状態遷移」節を参照）。
    - 出力の「次にやるべき改善候補」は、`propose.md` で提案ファイルに書き出す旨の案内に置き換える。
 2. `docs/proposal-loop.md`（運用手順書）を追加し、`local-improve-loop.md` から相互リンクする。
 
@@ -257,15 +284,19 @@ distribution 自体の改善材料である（例: 毎回同じ理由で却下�
 
 ### Stage 1
 
-- [ ] 不正な提案（schema 違反 / `rejected` で理由が空 / `id` 重複 / 追跡外 source / HEAD の祖先でない commit）で
-      `aro proposals check` が exit 1 と違反一覧を返す（ユニットテスト。AI は関与しない）
+- [ ] 不正な提案（schema 違反 / `open` 以外で `decision.by` が空 / `rejected` で理由が空 / `id` 重複 /
+      追跡外 source / HEAD の祖先でない commit）で `aro proposals check` が exit 1 と違反一覧を返す
+      （ユニットテスト。AI は関与しない）
 - [ ] 正常な提案で exit 0、`--json` が機械可読の結果を返す
 - [ ] `open` / `accepted` の提案の source が変化した場合に stale（通常 WARN / `--strict` で FAIL）になり、
       `rejected` / `done` / `superseded` では stale にならない
 - [ ] `open` → `accepted` / `rejected` を含む diff で `aro guard` が `proposal_decision` を報告し、
       **exit 1（required check が落ちる）**になる
-- [ ] 新規提案ファイルの追加のみ、および `accepted` → `done` の diff では `proposal_decision` が
-      報告されない（正常な propose PR / 実装 PR がノイズで落ちない）
+- [ ] `status: open` の新規提案ファイルの追加のみ、`accepted` → `done`、`status` が変わらない編集の
+      いずれの diff でも `proposal_decision` が報告されない（正常な propose PR / 実装 PR / 破棄記録の
+      PR がノイズで落ちない）
+- [ ] **`status: accepted`（または `rejected` / `superseded` / `done`）のファイルを新規追加した diff で
+      `proposal_decision` が fail する**（新規ファイル免除による採否検証の迂回経路を塞ぐ）
 - [ ] 提案 0 件の repo で PASS する（導入直後が異常扱いにならない）
 
 ### Stage 2
