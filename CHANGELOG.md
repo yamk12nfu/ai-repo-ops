@@ -25,6 +25,12 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
   標準ステップとし、`project_config` violation の override merge 手順を消費者視点で記載
   （dogfooding 2 repo 分の観測に基づく。issue #22 論点 2 への対応）。
 
+### Fixed
+
+- `improve.md`（managed prompt）の制約セクション冒頭を severity 導入後の挙動に整合させた。
+  「違反した変更は required check が落ちる」を `severity: fail` に限定し、`warn` は報告のみ・
+  改善ループでは中止条件、という区別を明記（warikapp#24 の CodeRabbit 指摘への対応）。
+
 ## [0.3.1] - 2026-07-21
 
 ### Fixed
