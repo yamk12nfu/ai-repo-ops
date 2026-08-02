@@ -11,12 +11,17 @@ export const KNOWLEDGE_INDEX_PATH = `${KNOWLEDGE_ROOT}/index.yaml`;
 /** MVPで扱うknowledge index schema version。 */
 export const KNOWLEDGE_INDEX_SCHEMA_VERSION = 1 as const;
 
-const FULL_GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
+/** 完全なlowercase Git SHA（SHA-1: 40桁 / SHA-256: 64桁）。knowledgeとproposalsで共有する。 */
+export const FULL_GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const KNOWLEDGE_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 /** index内のpathはexact file pathのみ。glob展開はローカルAI側の責務。 */
 const GLOB_META_RE = /[*?\[\]{}()!]/u;
 
-function exactSafePathSchema(label: string, options: { markdown?: boolean } = {}): z.ZodType<string> {
+/**
+ * 「安全な相対path・globなし（任意で.md必須）」を検証するzod schema。
+ * knowledge indexとproposal frontmatterのsource path検証で共有する。
+ */
+export function exactSafePathSchema(label: string, options: { markdown?: boolean } = {}): z.ZodType<string> {
   return z.string().transform((value, ctx) => {
     let normalized: string;
     try {

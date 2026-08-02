@@ -161,3 +161,10 @@ export class KnowledgeError extends AroError {
     super(code, message, options);
   }
 }
+
+/** repo 固有 proposal（.ai/local/proposals/*.md）のfrontmatter読み込み・検証に失敗したときのエラー。 */
+export class ProposalError extends AroError {
+  constructor(code: string, message: string, options: AroErrorOptions = {}) {
+    super(code, message, options);
+  }
+}

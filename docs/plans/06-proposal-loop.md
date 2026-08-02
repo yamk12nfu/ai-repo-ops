@@ -187,8 +187,11 @@ decision:
 
 ### Stage 1-1: 形式と schema
 
-1. `schemas/proposal.schema.json`（authoritative）を追加し、`pnpm schema:sync` / `schema:check` の
-   対象に加える（既存の project / knowledge と同じ扱い）。
+1. `schemas/proposal.schema.json`（authoritative）を追加する。`pnpm schema:sync` / `schema:check` の
+   対象化（managed copy の生成）はこの段階では行わない。managed copy を生やすと
+   `distribution/base/manifest.yaml` への追加と version bump が必要になり、全参加 repo に
+   drift（`aro doctor` の WARN）が出るため、`allowed_paths` の追加と同じ配布になる
+   Stage 1-3 でまとめて行う。
 2. frontmatter parser を追加する。knowledge の YAML 読み込み（`core/yaml.ts` + zod）を再利用し、
    Markdown 本文と frontmatter の分離だけを新規実装する。
 
@@ -238,7 +241,10 @@ aro proposals check --repo <path> [--strict] [--json]
    明示列挙する。未定義キーは既定 `fail` のため挙動は変わらないが、`default.yaml` が全キーを
    明示列挙している既存の書き方に揃える。
 3. `project.yaml.hbs` の `ai.allowed_paths` に `.ai/local/proposals/**` を追加し、manifest を bump する。
-   既存 repo は knowledge と同じく**設定専用 PR を先に merge する**。
+   既存 repo は knowledge と同じく**設定専用 PR を先に merge する**。同じ PR で
+   `schemas/proposal.schema.json` を `pnpm schema:sync` / `schema:check` の対象に加え、
+   managed copy（`.ai/managed/schemas/proposal.schema.json`）を配布する
+   （既存の project / knowledge と同じ扱い。Stage 1-1 から後ろ倒しした理由は前掲）。
 4. `.ai/managed/prompts/propose.md` を配布物に追加する。要件:
    - 実行前に `.ai/local/proposals/**` を**すべて読む**。`rejected` と実質同じ提案を再提出しない。
    - 提案は `status: open` の新規ファイルとしてのみ書く。既存ファイルの `status` / `decision` は変更しない。
