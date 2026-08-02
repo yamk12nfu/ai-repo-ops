@@ -8,6 +8,7 @@ import { registerSync } from "./commands/sync.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerGuard } from "./commands/guard.js";
 import { registerKnowledge } from "./commands/knowledge.js";
+import { registerProposals } from "./commands/proposals.js";
 
 /**
  * aro CLI のバージョン。manifest.version とは独立した CLI 自身のバージョン。
@@ -43,6 +44,7 @@ export function buildProgram(): Command {
   registerDoctor(program);
   registerGuard(program);
   registerKnowledge(program);
+  registerProposals(program);
 
   return program;
 }

@@ -9,7 +9,7 @@ describe("aro CLI scaffold", () => {
   it("トップレベルコマンドを登録している", () => {
     const program = buildProgram();
     const names = program.commands.map((command) => command.name()).sort();
-    expect(names).toEqual(["diff", "doctor", "guard", "init", "knowledge", "sync"]);
+    expect(names).toEqual(["diff", "doctor", "guard", "init", "knowledge", "proposals", "sync"]);
   });
 
   it("--help に各コマンドと概要を含む", () => {
@@ -20,6 +20,7 @@ describe("aro CLI scaffold", () => {
     expect(help).toContain("doctor");
     expect(help).toContain("guard");
     expect(help).toContain("knowledge");
+    expect(help).toContain("proposals");
     expect(help).toContain("aro");
   });
 
@@ -65,6 +66,18 @@ describe("aro CLI scaffold", () => {
       .find((command) => command.name() === "init")
       ?.options.find((option) => option.long === "--base");
     expect(baseOption?.mandatory).toBe(true);
+    expect(checkHelp).toContain("--strict");
+    expect(checkHelp).toContain("--json");
+  });
+
+  it("proposals は check サブコマンドを持つ", () => {
+    const proposals = buildProgram().commands.find((command) => command.name() === "proposals");
+    expect(proposals).toBeDefined();
+    expect(proposals?.commands.map((command) => command.name())).toEqual(["check"]);
+
+    const checkHelp =
+      proposals?.commands.find((command) => command.name() === "check")?.helpInformation() ?? "";
+    expect(checkHelp).toContain("--repo");
     expect(checkHelp).toContain("--strict");
     expect(checkHelp).toContain("--json");
   });
