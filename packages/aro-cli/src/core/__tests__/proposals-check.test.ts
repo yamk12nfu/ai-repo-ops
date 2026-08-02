@@ -1,4 +1,4 @@
-import { rm, symlink } from "node:fs/promises";
+import { mkdir, rm, symlink } from "node:fs/promises";
 import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -103,6 +103,73 @@ describe("runProposalsCheck", () => {
     expect(report.hasFailures).toBe(false);
     expect(report.summary.entries).toBe(0);
     expect(finding(report, "proposals.empty")?.status).toBe("pass");
+  });
+
+  it("proposals rootが通常ファイルならproposals.rootでFAILにする", async () => {
+    await seedSource();
+    await writeRaw(repoRoot, `${PROPOSALS_ROOT}`, "not a directory\n");
+
+    const report = await runProposalsCheck({ repoRoot, strict: false });
+
+    expect(report.hasFailures).toBe(true);
+    expect(report.summary.entries).toBe(0);
+    expect(finding(report, "proposals.root")?.status).toBe("fail");
+    expect(finding(report, "proposals.empty")).toBeUndefined();
+  });
+
+  it("proposals rootがsymlinkなら追従せずproposals.rootでFAILにする", async () => {
+    await seedSource();
+    await writeRaw(repoRoot, ".ai/local/.keep", "");
+    await symlink(path.join(repoRoot, "src"), path.join(repoRoot, PROPOSALS_ROOT));
+
+    const report = await runProposalsCheck({ repoRoot, strict: false });
+
+    expect(report.hasFailures).toBe(true);
+    expect(finding(report, "proposals.root")?.status).toBe("fail");
+    expect(finding(report, "proposals.root")?.hint).toContain("symlink");
+  });
+
+  it("proposals rootの親がsymlinkでもproposals.rootでFAILにする", async () => {
+    const commit = await seedSource();
+    await writeRaw(
+      repoRoot,
+      "real-local/proposals/good.md",
+      proposalMarkdown({ id: "good-proposal", status: "open", commit }),
+    );
+    await mkdir(path.join(repoRoot, ".ai"), { recursive: true });
+    await symlink(path.join(repoRoot, "real-local"), path.join(repoRoot, ".ai/local"));
+
+    const report = await runProposalsCheck({ repoRoot, strict: false });
+
+    expect(report.hasFailures).toBe(true);
+    expect(finding(report, "proposals.root")?.status).toBe("fail");
+  });
+
+  it("大文字拡張子（.MD）の提案も列挙して検証する", async () => {
+    const commit = await seedSource();
+    await writeRaw(
+      repoRoot,
+      `${PROPOSALS_ROOT}/UPPER.MD`,
+      proposalMarkdown({ id: "upper-ext", status: "open", commit }),
+    );
+
+    const report = await runProposalsCheck({ repoRoot, strict: false });
+
+    expect(report.summary.entries).toBe(1);
+    expect(report.hasFailures).toBe(false);
+    expect(finding(report, "frontmatter.schema")?.status).toBe("pass");
+    expect(finding(report, "proposals.empty")).toBeUndefined();
+  });
+
+  it("*.mdという名前のディレクトリをdocument.fileでFAILにする", async () => {
+    await seedSource();
+    await mkdir(path.join(repoRoot, PROPOSALS_ROOT, "foo.md"), { recursive: true });
+
+    const report = await runProposalsCheck({ repoRoot, strict: false });
+
+    expect(report.hasFailures).toBe(true);
+    expect(finding(report, "document.file")?.status).toBe("fail");
+    expect(finding(report, "proposals.empty")).toBeUndefined();
   });
 
   it("frontmatterが無いファイルをfrontmatter.parseでFAILにする", async () => {

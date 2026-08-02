@@ -12,10 +12,11 @@
  * - stale 判定は `status` に依存する（`open` / `accepted` のみ対象。`rejected` / `done` /
  *   `superseded` は判断が終わった履歴であり、根拠が後から変わっても記録の価値は変わらない）。
  */
-import { readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 
-import { ProposalError } from "./errors.js";
+import { PathSafetyError, ProposalError } from "./errors.js";
+import { assertNoSymlinkInPath } from "./filesystem.js";
 import {
   forbiddenSourcePattern,
   readUtf8TextWithinRoot,
@@ -96,29 +97,76 @@ function finalizeReport(
   };
 }
 
-function isMissingDirectoryError(error: unknown): boolean {
-  if (typeof error !== "object" || error === null || !("code" in error)) return false;
+function errnoCode(error: unknown): string | undefined {
+  if (typeof error !== "object" || error === null || !("code" in error)) return undefined;
   const code = (error as { code?: unknown }).code;
-  return code === "ENOENT" || code === "ENOTDIR";
+  return typeof code === "string" ? code : undefined;
+}
+
+type ProposalsRootInspection =
+  | { kind: "missing" }
+  | { kind: "invalid"; hint: string }
+  | { kind: "ok" };
+
+/**
+ * PROPOSALS_ROOT が「symlink を含まない実ディレクトリ」であることを検証する。
+ *
+ * `readdir` は最終要素の symlink を追従するため、検証せずに列挙すると
+ * 「repo 外の空ディレクトリへの symlink」や「proposals の位置に置かれた通常ファイル」が
+ * 提案 0 件（正常）へ黙って誤分類される。不在（ENOENT）だけを正常な導入前状態として扱う。
+ */
+async function inspectProposalsRoot(repoRoot: string): Promise<ProposalsRootInspection> {
+  try {
+    await assertNoSymlinkInPath(repoRoot, PROPOSALS_ROOT, "proposals root");
+  } catch (error) {
+    if (error instanceof PathSafetyError) return { kind: "invalid", hint: error.message };
+    // 構成要素（例: .ai/local）が通常ファイルだと lstat が ENOTDIR で失敗する。
+    if (errnoCode(error) === "ENOTDIR") {
+      return { kind: "invalid", hint: "親pathの構成要素がディレクトリではありません。" };
+    }
+    throw error;
+  }
+  let stats;
+  try {
+    stats = await lstat(path.join(repoRoot, PROPOSALS_ROOT));
+  } catch (error) {
+    if (errnoCode(error) === "ENOENT") return { kind: "missing" };
+    if (errnoCode(error) === "ENOTDIR") {
+      return { kind: "invalid", hint: "親pathの構成要素がディレクトリではありません。" };
+    }
+    throw error;
+  }
+  if (!stats.isDirectory()) {
+    return { kind: "invalid", hint: "proposalsのpathがディレクトリではありません。" };
+  }
+  return { kind: "ok" };
 }
 
 /**
- * PROPOSALS_ROOT 直下の `*.md` を列挙する。ディレクトリ不在は提案 0 件として扱う。
- * symlink 等の不正な entry も名前が `*.md` なら列挙に含め、後段の安全な読み込み
- * （symlink 非追従）で FAIL にする（黙って読み飛ばさない）。
+ * PROPOSALS_ROOT 直下の `*.md`（拡張子の大文字小文字は区別しない）を列挙する。
+ * `*.md` の名前を持つディレクトリは提案として読めないため FAIL にし、
+ * symlink 等の不正な entry は列挙に含めて後段の安全な読み込み（symlink 非追従）で
+ * FAIL にする（どちらも黙って読み飛ばさない）。
  */
-async function listProposalFileNames(repoRoot: string): Promise<string[]> {
-  let dirents;
-  try {
-    dirents = await readdir(path.join(repoRoot, PROPOSALS_ROOT), { withFileTypes: true });
-  } catch (error) {
-    if (isMissingDirectoryError(error)) return [];
-    throw error;
+async function listProposalFileNames(
+  repoRoot: string,
+  findings: ProposalFinding[],
+): Promise<string[]> {
+  const dirents = await readdir(path.join(repoRoot, PROPOSALS_ROOT), { withFileTypes: true });
+  const fileNames: string[] = [];
+  for (const dirent of dirents.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))) {
+    if (!dirent.name.toLowerCase().endsWith(".md")) continue;
+    if (dirent.isDirectory()) {
+      findings.push(
+        fail("document.file", `proposalはファイルである必要があります（ディレクトリ）: ${dirent.name}`, {
+          path: `${PROPOSALS_ROOT}/${dirent.name}`,
+        }),
+      );
+      continue;
+    }
+    fileNames.push(dirent.name);
   }
-  return dirents
-    .filter((dirent) => !dirent.isDirectory() && dirent.name.endsWith(".md"))
-    .map((dirent) => dirent.name)
-    .sort();
+  return fileNames;
 }
 
 async function parseProposalFile(
@@ -360,10 +408,23 @@ export async function runProposalsCheck(input: RunProposalsCheckInput): Promise<
   const repoRoot = path.resolve(input.repoRoot);
   const findings: ProposalFinding[] = [];
 
-  const fileNames = await listProposalFileNames(repoRoot);
+  const rootState = await inspectProposalsRoot(repoRoot);
+  if (rootState.kind === "invalid") {
+    findings.push(
+      fail("proposals.root", `proposalsのroot pathが不正です: ${PROPOSALS_ROOT}`, {
+        path: PROPOSALS_ROOT,
+        hint: rootState.hint,
+      }),
+    );
+    return finalizeReport(repoRoot, input.strict, 0, findings);
+  }
+  const fileNames =
+    rootState.kind === "missing" ? [] : await listProposalFileNames(repoRoot, findings);
   if (fileNames.length === 0) {
-    // 導入直後の正常な状態。knowledge の entries.empty（WARN）とは違い PASS にする。
-    findings.push(pass("proposals.empty", `proposalはまだありません: ${PROPOSALS_ROOT}`));
+    if (findings.length === 0) {
+      // 導入直後の正常な状態。knowledge の entries.empty（WARN）とは違い PASS にする。
+      findings.push(pass("proposals.empty", `proposalはまだありません: ${PROPOSALS_ROOT}`));
+    }
     return finalizeReport(repoRoot, input.strict, 0, findings);
   }
 
