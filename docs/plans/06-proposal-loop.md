@@ -332,7 +332,14 @@ distribution 自体の改善材料である（例: 毎回同じ理由で却下�
   各 PR 単体の `aro proposals check` も通り、**両方 merge された後で初めて重複が混入する**。
   緩和候補: (a) CI の `proposals check` を PR の merge 先（default branch 統合後の状態）に対しても
   実行し、次の PR の CI で必ず拾う、(b) `id` をファイル名から導出して人間が気づきやすくする。
-  どちらを採るかは Stage 1-2 の実装時に決める。
+  **→ Stage 1-2 で (a) を採用した**。理由: (b) は「`id` にファイル名の日付 prefix を含めない」という
+  Stage 1-1 で merge 済みの形式決定と両立しない。prefix を除いて導出すると、別名のファイル
+  （`2026-07-x.md` と `2026-08-x.md`）が同じ `id` になっても git conflict は起きず、検出は保証されない。
+  `id` = ファイル名全体にすれば add/add conflict で機械的に防げるが、それは形式の変更であり、
+  かつ日付 prefix が `id` に混入する。(a) は形式を変えずに済み、重複が混入しても default branch に
+  対する次回の `proposals check`（push 時 / 次の PR の CI）で決定的に検出される。repo 内の横断検出
+  （`id.duplicate`）自体は Stage 1-2 の `aro proposals check` が実装済みで、CI workflow を default
+  branch への push でも実行する配布変更は Stage 1-3 で行う。
 - **提案の粒度が大きすぎる**: 「アーキテクチャを見直す」のような提案は採用しても実装できない。
   `propose.md` で「1 提案 = 1 PR で完結する大きさ」を規定するが、実効性は Stage 3 待ち。
 - **knowledge と形式が違う**: knowledge は index.yaml、proposals は frontmatter。理由は前述のとおり
