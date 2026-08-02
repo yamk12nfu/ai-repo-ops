@@ -66,7 +66,8 @@
             "required": ["by"],
             "properties": {
               "by": {
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "\\S"
               }
             }
           }
@@ -89,7 +90,8 @@
             "required": ["reason"],
             "properties": {
               "reason": {
-                "minLength": 1
+                "minLength": 1,
+                "pattern": "\\S"
               }
             }
           }
