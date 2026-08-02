@@ -34,13 +34,35 @@ const changeLimitsSchema = z
   .passthrough();
 
 /**
+ * violation 1 件の扱い。`fail` は required check を落とし、`warn` は報告のみ行う。
+ *
+ * 不変条件（誰が変更しても危険なもの: managed_file / workflow / project_config / forbidden_path）と、
+ * AI の行動半径の制限（outside_allowed_paths / change_limits 系）を分けるために導入した。
+ * 後者を人間の PR に対して required check として適用するのは allowed_paths の定義
+ * （「AI が変更してよい path」）の誤用であり、override merge の常態化を招いていた。
+ */
+export const guardSeveritySchema = z.enum(["fail", "warn"]);
+
+/** violation の扱い（`fail` / `warn`）。 */
+export type GuardSeverity = z.infer<typeof guardSeveritySchema>;
+
+/**
+ * violation kind → severity の対応表。
+ *
+ * キーは検証しない（未知の kind は guard 側で単に参照されない）。表に無い kind は
+ * `fail` として扱うため、severity を持たない既存 policy はこれまでどおりの挙動になる。
+ */
+const severityMapSchema = z.record(z.string(), guardSeveritySchema);
+
+/**
  * guard が使う policy の最小 schema。
- * `change_limits` / `forbidden_paths` のみ検証し、他は通す。
+ * `change_limits` / `forbidden_paths` / `severity` のみ検証し、他は通す。
  */
 export const policySchema = z
   .object({
     change_limits: changeLimitsSchema.optional(),
     forbidden_paths: z.array(z.string().min(1)).optional(),
+    severity: severityMapSchema.optional(),
   })
   .passthrough();
 

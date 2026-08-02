@@ -16,9 +16,14 @@ export interface FormatGuardOptions {
   trustedSync?: SyncAuthenticationReport | undefined;
 }
 
-/** 1 件の違反を 1〜2 行に整形する（limit/actual があれば次行に添える）。 */
+/**
+ * 1 件の違反を 1〜2 行に整形する（limit/actual があれば次行に添える）。
+ * severity=warn は WARN ラベルで表示し、報告はするが exit code には影響しないことを示す。
+ */
 function formatViolation(violation: GuardViolation, p: Palette): string[] {
-  const lines = [`${p.conflict("VIOLATION")}  [${violation.kind}] ${violation.message}`];
+  const label =
+    violation.severity === "warn" ? `${p.warn("WARN")}       ` : `${p.conflict("VIOLATION")}  `;
+  const lines = [`${label}[${violation.kind}] ${violation.message}`];
   if (violation.limit !== undefined && violation.actual !== undefined) {
     lines.push(`      limit=${violation.limit} actual=${violation.actual}`);
   }
@@ -48,8 +53,17 @@ export function formatGuardHuman(report: GuardReport, options: FormatGuardOption
   if (report.violations.length === 0) {
     lines.push(`${p.add("OK")}  no policy violations detected`);
   } else {
-    for (const violation of report.violations) {
+    // fail を先に出す（warn だけの場合との区別を目立たせる）。
+    const ordered = [
+      ...report.violations.filter((violation) => violation.severity === "fail"),
+      ...report.violations.filter((violation) => violation.severity === "warn"),
+    ];
+    for (const violation of ordered) {
       lines.push(...formatViolation(violation, p));
+    }
+    if (!report.hasFailures) {
+      lines.push("");
+      lines.push(`${p.add("OK")}  警告のみです（severity=fail の違反はありません）。`);
     }
   }
 
@@ -57,7 +71,8 @@ export function formatGuardHuman(report: GuardReport, options: FormatGuardOption
   lines.push(p.heading("Summary:"));
   lines.push(`  ${report.summary.checkedFiles} files checked`);
   lines.push(`  ${report.summary.addedLines} lines added`);
-  lines.push(`  ${report.summary.violationCount} violations`);
+  lines.push(`  ${report.summary.failCount} violations (fail)`);
+  lines.push(`  ${report.summary.warnCount} warnings`);
 
   return lines.join("\n");
 }

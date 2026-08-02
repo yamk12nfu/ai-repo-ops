@@ -172,14 +172,15 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
 
     if (options.json) {
       io.stdout(
-        `${JSON.stringify({ command: "guard", ok: !report.hasViolations, base: options.base, trustedSync, report }, null, 2)}\n`,
+        `${JSON.stringify({ command: "guard", ok: !report.hasFailures, base: options.base, trustedSync, report }, null, 2)}\n`,
       );
     } else {
       io.stdout(
         `${formatGuardHuman(report, { base: options.base, color: io.color, trustedSync })}\n`,
       );
     }
-    return report.hasViolations ? GUARD_EXIT.violations : GUARD_EXIT.ok;
+    // severity=warn だけの場合は報告のみで exit 0（required check を落とさない）。
+    return report.hasFailures ? GUARD_EXIT.violations : GUARD_EXIT.ok;
   } catch (error) {
     if (options.json) {
       io.stderr(`${JSON.stringify({ command: "guard", ok: false, error: errorToJson(error) }, null, 2)}\n`);

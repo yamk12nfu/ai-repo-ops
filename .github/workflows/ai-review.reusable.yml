@@ -143,15 +143,18 @@ jobs:
             cat "$ARTIFACTS_DIR/guard-error.json" >&2 || true
             exit "$code"
           fi
-          if [ "$code" -eq 1 ]; then
-            # 違反テーブルを一度だけ生成し、summary / PR コメントの両方で使う。
-            # path / message は PR 作者が制御できる入力（ファイル名等）を含むため、
-            # Markdown テーブルを壊す文字（|・改行）をエスケープする。
-            jq -r '
-              def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
-              .report.violations[] | "| \(.kind|esc) | \((.path // "-")|esc) | \(.message|esc) |"
-            ' "$ARTIFACTS_DIR/guard-result.json" > "$ARTIFACTS_DIR/guard-violations.md"
-          fi
+          # 違反テーブルを一度だけ生成し、summary / PR コメントの両方で使う。
+          # exit 0（severity=warn のみ）でも生成する。warn を握りつぶすと
+          # 「緑だが範囲を逸脱している」PR が可視化されない（docs/guard.md の severity 参照）。
+          # path / message は PR 作者が制御できる入力（ファイル名等）を含むため、
+          # Markdown テーブルを壊す文字（|・改行）をエスケープする。
+          jq -r '
+            def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
+            .report.violations[]
+            | "| \((.severity // "fail")|esc) | \(.kind|esc) | \((.path // "-")|esc) | \(.message|esc) |"
+          ' "$ARTIFACTS_DIR/guard-result.json" > "$ARTIFACTS_DIR/guard-violations.md"
+          warn_count="$(jq -r '.report.summary.warnCount // 0' "$ARTIFACTS_DIR/guard-result.json")"
+          echo "warn_count=$warn_count" >> "$GITHUB_OUTPUT"
           # exit 0（違反なし）/ 1（違反あり）はここでは失敗にせず、summary 出力後に判定する
           exit 0
 
@@ -228,6 +231,7 @@ jobs:
           SKIP: ${{ steps.gate.outputs.skip }}
           SKIP_REASON: ${{ steps.gate.outputs.reason }}
           GUARD_EXIT: ${{ steps.guard.outputs.exit_code }}
+          GUARD_WARN_COUNT: ${{ steps.guard.outputs.warn_count }}
           NOT_GUARDABLE: ${{ steps.guard.outputs.not_guardable }}
           ERROR_CODE: ${{ steps.guard.outputs.error_code }}
           CONFIG_PATH: ${{ inputs.config_path }}
@@ -248,12 +252,20 @@ jobs:
               echo "- base に \`.ai/project.yaml\` / policy が無いため guard は検証できない。"
               echo "  ai-repo-ops 導入 PR は導入完了後の PR から guard 対象になる（docs/guard.md 参照）。"
             elif [ "$GUARD_EXIT" = "0" ]; then
-              echo "- 状態: **passed** — policies 違反なし"
+              if [ "${GUARD_WARN_COUNT:-0}" -gt 0 ] 2>/dev/null; then
+                echo "- 状態: **passed（警告あり）** — severity=fail の違反は無し。以下は報告のみで job は落とさない"
+                echo ""
+                echo "| severity | kind | path | 内容 |"
+                echo "|---|---|---|---|"
+                cat "$ARTIFACTS_DIR/guard-violations.md"
+              else
+                echo "- 状態: **passed** — policies 違反なし"
+              fi
             elif [ "$GUARD_EXIT" = "1" ]; then
               echo "- 状態: **violations found** — この job は fail する"
               echo ""
-              echo "| kind | path | 内容 |"
-              echo "|---|---|---|"
+              echo "| severity | kind | path | 内容 |"
+              echo "|---|---|---|---|"
               cat "$ARTIFACTS_DIR/guard-violations.md"
             else
               echo "- 状態: **error**（guard exit: ${GUARD_EXIT:-unknown}）— job log を参照"
@@ -309,10 +321,11 @@ jobs:
           {
             echo "## aro guard: policies 違反を検出しました"
             echo ""
-            echo "| kind | path | 内容 |"
-            echo "|---|---|---|"
+            echo "| severity | kind | path | 内容 |"
+            echo "|---|---|---|---|"
             cat "$ARTIFACTS_DIR/guard-violations.md"
             echo ""
+            echo "\`severity=fail\` がこの job を落とします（\`warn\` は報告のみ）。"
             echo "検証ルールは base 側の \`.ai/project.yaml\` と適用 policy から読まれます（PR 内の変更では緩められません）。詳細: docs/guard.md"
           } > "$ARTIFACTS_DIR/guard-comment.md"
           gh pr comment "$PR_NUMBER" --body-file "$ARTIFACTS_DIR/guard-comment.md"
