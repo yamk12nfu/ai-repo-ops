@@ -75,17 +75,19 @@ const forbiddenSourceMatchers = FORBIDDEN_SOURCE_PATTERNS.map((pattern) => ({
   isMatch: picomatch(pattern, { dot: true, nocase: true }),
 }));
 
-function forbiddenSourcePattern(sourcePath: string): string | undefined {
+/** source pathが組み込みの禁止patternに該当すればそのpatternを返す（proposals checkも流用する）。 */
+export function forbiddenSourcePattern(sourcePath: string): string | undefined {
   return forbiddenSourceMatchers.find((matcher) => matcher.isMatch(sourcePath))?.pattern;
 }
 
-type TextReadResult =
+export type TextReadResult =
   | { kind: "ok"; text: string }
   | { kind: "missing" }
   | { kind: "not-text" }
   | { kind: "read-error"; error: unknown };
 
-async function readUtf8TextWithinRoot(
+/** repo root内のファイルをsymlink非追従でUTF-8テキストとして読む（proposals checkも流用する）。 */
+export async function readUtf8TextWithinRoot(
   repoRoot: string,
   relativePath: string,
   label: string,
