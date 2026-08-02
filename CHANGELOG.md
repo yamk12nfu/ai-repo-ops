@@ -11,8 +11,14 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-08-03
+
 ### Added
 
+- Proposal Loop（Stage 1）: proposal frontmatter の形式と authoritative schema
+  （`schemas/proposal.schema.json`）を追加し、`.ai/local/proposals/**` の提案を読み取り専用で
+  決定的に検証する `aro proposals check` を追加（`--strict` で stale proposal も FAIL）。
+  計画は `docs/plans/06-proposal-loop.md`。
 - `aro guard` の violation に severity（`fail` / `warn`）を導入。適用 policy の `severity` で
   kind ごとに定義し、`warn` は報告のみで exit code を落とさない。`severity` に無い kind と
   severity 未対応 policy は従来どおり `fail`（後方互換）。
@@ -287,7 +293,8 @@ echo するだけの stub。** AI 実行の実装は Post-MVP（[計画 02](./do
   タグ発行までは `v1` タグが存在しないため、`aro init` 済みの対象 repo で workflow が解決エラーになる。
   本リリース（`v0.1.0` タグ発行 + `v1` 移動）で解消する。
 
-[Unreleased]: https://github.com/yamk12nfu/ai-repo-ops/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/yamk12nfu/ai-repo-ops/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.3.2
 [0.3.1]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.3.1
 [0.3.0]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.3.0
 [0.2.0]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.2.0
