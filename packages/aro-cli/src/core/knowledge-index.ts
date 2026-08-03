@@ -14,8 +14,12 @@ export const KNOWLEDGE_INDEX_SCHEMA_VERSION = 1 as const;
 /** 完全なlowercase Git SHA（SHA-1: 40桁 / SHA-256: 64桁）。knowledgeとproposalsで共有する。 */
 export const FULL_GIT_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/u;
 const KNOWLEDGE_ID_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-/** index内のpathはexact file pathのみ。glob展開はローカルAI側の責務。 */
-const GLOB_META_RE = /[*?\[\]{}()!]/u;
+/**
+ * index内のpathはexact file pathのみ。glob展開はローカルAI側の責務。
+ * 素の `()` はglobメタ文字ではなく実在path（例: Next.js route groupの `app/(app)/...`）に
+ * 現れるため許可し、extglobの `+(` `@(` だけを拒否する（`!(` `*(` `?(` は `!` `*` `?` で拒否済み）。
+ */
+const GLOB_META_RE = /[*?\[\]{}!]|[+@]\(/u;
 
 /**
  * 「安全な相対path・globなし（任意で.md必須）」を検証するzod schema。
@@ -23,6 +27,8 @@ const GLOB_META_RE = /[*?\[\]{}()!]/u;
  */
 export function exactSafePathSchema(label: string, options: { markdown?: boolean } = {}): z.ZodType<string> {
   return z.string().transform((value, ctx) => {
+    // fatal: true が無いとparse全体は「dirty」のまま続行され、object側のsuperRefineが
+    // 検証失敗済みの値（string以外）で実行されてTypeErrorになり、本来のメッセージが失われる。
     let normalized: string;
     try {
       normalized = assertSafeRelativePath(value, label);
@@ -30,6 +36,7 @@ export function exactSafePathSchema(label: string, options: { markdown?: boolean
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: error instanceof Error ? error.message : String(error),
+        fatal: true,
       });
       return z.NEVER;
     }
@@ -37,6 +44,7 @@ export function exactSafePathSchema(label: string, options: { markdown?: boolean
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `${label} にglobは使えません。正確なファイルpathを指定してください: ${value}`,
+        fatal: true,
       });
       return z.NEVER;
     }
@@ -44,6 +52,7 @@ export function exactSafePathSchema(label: string, options: { markdown?: boolean
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: `${label} はMarkdownファイル（.md）である必要があります: ${value}`,
+        fatal: true,
       });
       return z.NEVER;
     }

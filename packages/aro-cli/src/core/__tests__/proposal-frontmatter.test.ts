@@ -173,6 +173,28 @@ describe("parseProposalDocument", () => {
     },
   );
 
+  it("Next.js route groupなど素の `()` を含むsource pathを許可する", () => {
+    const document = parseProposalDocument(
+      proposalDoc({ sourcePath: '"app/(app)/expenses/page.tsx"' }),
+    );
+    expect(document.frontmatter.sources).toEqual([{ path: "app/(app)/expenses/page.tsx" }]);
+  });
+
+  it.each(["+(a|b)/x.ts", "@(a|b)/x.ts", "!(a)/x.ts"])(
+    "extglobのsource pathを拒否する: %s",
+    (sourcePath) => {
+      expect(() => parseProposalDocument(proposalDoc({ sourcePath: `"${sourcePath}"` }))).toThrow(
+        /globは使えません/u,
+      );
+    },
+  );
+
+  it("source path検証の失敗をTypeErrorに握り潰さず本来のメッセージで報告する", () => {
+    const parse = () => parseProposalDocument(proposalDoc({ sourcePath: '"../outside.ts"' }));
+    expect(parse).toThrow(ProposalError);
+    expect(parse).toThrow(/親ディレクトリ参照/u);
+  });
+
   it("source pathの大文字小文字違いを含む重複を拒否する", () => {
     expect(() =>
       parseProposalDocument(proposalDoc({ extraFrontmatter: "  - path: SRC/API/CLIENT.TS\n" })),

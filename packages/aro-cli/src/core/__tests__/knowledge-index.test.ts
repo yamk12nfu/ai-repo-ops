@@ -80,6 +80,28 @@ describe("parseKnowledgeIndex", () => {
     },
   );
 
+  it("Next.js route groupなど素の `()` を含むsource pathを許可する", () => {
+    const yaml = indexYaml().replace("src/auth/token-service.ts", "app/(app)/page.tsx");
+    expect(parseKnowledgeIndex(yaml).entries[0]?.sources).toEqual([
+      { path: "app/(app)/page.tsx" },
+    ]);
+  });
+
+  it.each(['"+(a|b)/x.ts"', '"@(a|b)/x.ts"'])(
+    "extglobのsource pathを拒否する: %s",
+    (source) => {
+      expect(() =>
+        parseKnowledgeIndex(indexYaml().replace("src/auth/token-service.ts", source)),
+      ).toThrow(/globは使えません/u);
+    },
+  );
+
+  it("source path検証の失敗をTypeErrorに握り潰さず本来のメッセージで報告する", () => {
+    expect(() =>
+      parseKnowledgeIndex(indexYaml().replace("src/auth/token-service.ts", '"../secret"')),
+    ).toThrow(/親ディレクトリ参照/u);
+  });
+
   it("sourceが空のentryを拒否する", () => {
     const yaml = indexYaml().replace("    sources:\n      - path: src/auth/token-service.ts\n", "    sources: []\n");
     expect(() => parseKnowledgeIndex(yaml)).toThrow(/sources/u);
