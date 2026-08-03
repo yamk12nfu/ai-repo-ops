@@ -11,6 +11,16 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Fixed
+
+- knowledge / proposal の source path 検証が失敗したとき、本来の検証メッセージが
+  `TypeError`（`source.path.toLowerCase is not a function`）に握り潰されて表示されない問題を修正。
+  zod transform の検証失敗を fatal issue にし、object 側の superRefine が不正値で実行される
+  経路を塞いだ（warikapp の proposal 作成中に発見）。
+- source path の glob 禁止チェックが素の `()` をメタ文字扱いし、Next.js route group
+  （`app/(app)/...` など）の実在 path を source に指定できない問題を修正。extglob
+  （`+(` `@(` `!(` `*(` `?(`）は引き続き拒否する。
+
 ## [0.3.2] - 2026-08-03
 
 ### Added
