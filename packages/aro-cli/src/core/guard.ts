@@ -19,6 +19,10 @@ import { LOCKFILE_RELATIVE_PATH } from "./lockfile.js";
 import { PROJECT_YAML_PATH } from "./manifest.js";
 import type { GuardSeverity, Policy } from "./policy.js";
 import type { ProjectConfig } from "./project-config.js";
+import {
+  proposalTransitionViolationMessage,
+  type ProposalTransition,
+} from "./proposal-decision.js";
 
 /** 1 件の違反種別。 */
 export type GuardViolationKind =
@@ -28,7 +32,8 @@ export type GuardViolationKind =
   | "project_config"
   | "outside_allowed_paths"
   | "too_many_files"
-  | "too_many_added_lines";
+  | "too_many_added_lines"
+  | "proposal_decision";
 
 /** 1 件の違反。 */
 export interface GuardViolation {
@@ -105,6 +110,12 @@ export interface RunGuardInput {
   policy: Policy;
   /** authoritative な sync 結果と完全一致すると認証された path。 */
   trustedSyncPaths?: ReadonlySet<string> | undefined;
+  /**
+   * 変更された proposal ファイルの merge-base 側 / HEAD 側の状態（`proposal_decision` の判定入力）。
+   * revision からの読み出しは呼び出し側（commands/guard.ts）が行う。guard を純粋関数に保つため、
+   * ここではテキストの読み出し済み分類結果だけを受け取る。未指定なら判定しない。
+   */
+  proposalTransitions?: readonly ProposalTransition[] | undefined;
 }
 
 /** glob pattern 1 件分の matcher。 */
@@ -223,13 +234,16 @@ function checkFile(
  *      明示的に override する運用を要求する。docs/guard.md「project_config の扱い」参照）
  *   5. allowed_paths（project.yaml の `ai.allowed_paths` が定義されている場合のみ。未定義なら制限なし）
  *   6. change_limits（変更ファイル数の実効上限は project.yaml / policy の厳しい方・追加行数合計は policy のみ）
+ *   7. proposal_decision（`proposalTransitions` が渡された場合のみ。提案の採否遷移という
+ *      **ファイル内容に基づく判定**で、判定ロジックは core/proposal-decision.ts。人間のみが行える
+ *      遷移を含む PR を required check の fail として表面化させ、人間の override を要求する）
  *
  * `projectConfig` / `policy` は呼び出し側（commands/guard.ts）が merge-base（PR からは書き換えられない
  * revision）から読んだ値を渡す前提。ここではその revision の違いを意識しない（同じ入力なら同じ結果を
  * 返す純粋関数）。
  */
 export function runGuard(input: RunGuardInput): GuardReport {
-  const { changedFiles, projectConfig, policy, trustedSyncPaths } = input;
+  const { changedFiles, projectConfig, policy, trustedSyncPaths, proposalTransitions } = input;
 
   const forbiddenPatterns = [
     ...(projectConfig.ai?.forbidden_paths ?? []),
@@ -248,6 +262,14 @@ export function runGuard(input: RunGuardInput): GuardReport {
   const rawViolations: RawGuardViolation[] = [];
   for (const file of changedFiles) {
     rawViolations.push(...checkFile(file, matchers, trustedSyncPaths));
+  }
+
+  // proposal の採否遷移（内容ベースの判定。他の violation と重複しても除去せずそれぞれ報告する）。
+  for (const transition of proposalTransitions ?? []) {
+    const message = proposalTransitionViolationMessage(transition);
+    if (message !== null) {
+      rawViolations.push({ kind: "proposal_decision", path: transition.path, message });
+    }
   }
 
   const checkedFiles = changedFiles.length;

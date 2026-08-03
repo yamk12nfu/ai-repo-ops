@@ -23,6 +23,9 @@
 #   - secrets 不要のため fork PR でも実行できる（旧エンジンの fork skip は廃止）。
 #   - base に .ai/project.yaml が無い場合（ai-repo-ops 導入 PR 等）は検証不能として
 #     明示 skip し、workflow は成功する（理由を step summary に出力）。
+#   - pull_request では guard / knowledge check / proposals check を、default branch への
+#     push では proposals check のみを実行する（並行 PR の merge で混入した proposal id の
+#     重複を merge 後の状態で決定的に検出する。docs/plans/06-proposal-loop.md 参照）。
 # =============================================================================
 name: Reusable AI Review
 
@@ -64,27 +67,53 @@ jobs:
       # ならない（PR が .ai/project.yaml を削除したケースも guard 自身が project_config
       # violation として報告する — precheck で落とすと違反一覧が出ずに終わってしまう）。
 
-      - name: Gate — pull_request イベント以外は skip
+      # pull_request: guard + knowledge check + proposals check を実行する。
+      # push（default branch）: proposals check のみ実行する。並行 PR で混入した proposal id の
+      #   重複は各 PR 単体の検証では検出できず、merge 後の default branch に対する検証で初めて
+      #   決定的に拾える（docs/plans/06-proposal-loop.md「id の重複が並行 PR で検出されない」参照）。
+      - name: Gate — 実行モードの決定（pr / push / skip）
         id: gate
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "$EVENT_NAME" != "pull_request" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "reason=pull_request イベントではない（event: $EVENT_NAME）。guard は PR の diff に対してのみ実行する。" >> "$GITHUB_OUTPUT"
-          else
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "mode=pr" >> "$GITHUB_OUTPUT"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "mode=push" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "reason=pull_request / push イベントではない（event: $EVENT_NAME）。" >> "$GITHUB_OUTPUT"
+          fi
+
+      # push モードでは proposals が未導入（ディレクトリ不在）なら engine の build ごと省略する。
+      # pr モードでは guard のために engine が必要なので、proposals check も常に実行する
+      # （提案 0 件は PASS であり、実行してもノイズにならない）。
+      - name: Gate — proposals check の要否
+        id: proposals_gate
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          MODE: ${{ steps.gate.outputs.mode }}
+        run: |
+          if [ "$MODE" = "pr" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ -d ".ai/local/proposals" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "reason=proposalsディレクトリが存在しない（未導入repo）" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Prepare review artifacts directory
         id: artifacts
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && (steps.gate.outputs.mode == 'pr' || steps.proposals_gate.outputs.run == 'true')
         run: |
           artifacts_dir="$(mktemp -d "$RUNNER_TEMP/aro-review.XXXXXX")"
           echo "dir=$artifacts_dir" >> "$GITHUB_OUTPUT"
 
       - name: Checkout guard engine (ai-repo-ops)
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && (steps.gate.outputs.mode == 'pr' || steps.proposals_gate.outputs.run == 'true')
         uses: actions/checkout@v5
         with:
           # この reusable workflow 自身と同じ repo・同じ commit の CLI を使う（workflow と
@@ -98,13 +127,13 @@ jobs:
           persist-credentials: false
 
       - uses: actions/setup-node@v5
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && (steps.gate.outputs.mode == 'pr' || steps.proposals_gate.outputs.run == 'true')
         with:
           node-version: 24
           package-manager-cache: false
 
       - name: Build aro CLI
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && (steps.gate.outputs.mode == 'pr' || steps.proposals_gate.outputs.run == 'true')
         working-directory: .aro-engine
         run: |
           corepack enable
@@ -113,7 +142,7 @@ jobs:
 
       - name: Run aro guard
         id: guard
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && steps.gate.outputs.mode == 'pr'
         env:
           BASE_REF: ${{ github.base_ref }}
           ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
@@ -160,7 +189,7 @@ jobs:
 
       - name: Run knowledge check
         id: knowledge
-        if: steps.gate.outputs.skip != 'true'
+        if: steps.gate.outputs.skip != 'true' && steps.gate.outputs.mode == 'pr'
         env:
           BASE_REF: ${{ github.base_ref }}
           ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
@@ -225,11 +254,70 @@ jobs:
           # exit 1（検証FAIL）はsummary出力後に専用stepでfailさせる。
           exit 0
 
+      - name: Run proposals check
+        id: proposals
+        if: steps.gate.outputs.skip != 'true' && steps.proposals_gate.outputs.run == 'true'
+        env:
+          MODE: ${{ steps.gate.outputs.mode }}
+          BASE_REF: ${{ github.base_ref }}
+          ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
+        run: |
+          # strict（stale もFAIL）にするのは、PR が proposals を変更している場合のみ。
+          # push（default branch）では非 strict で実行する。ここでの主目的は、並行 PR の merge で
+          # 混入した id 重複（fail。strict に依らない）を決定的に検出することであり、
+          # source の変化による stale で default branch を赤くはしない。
+          strict=false
+          if [ "$MODE" = "pr" ]; then
+            if ! git diff --quiet "origin/$BASE_REF...HEAD" -- ".ai/local/proposals/"; then
+              strict=true
+            fi
+          fi
+          echo "strict=$strict" >> "$GITHUB_OUTPUT"
+
+          set +e
+          if [ "$strict" = "true" ]; then
+            node .aro-engine/packages/aro-cli/dist/cli.js proposals check \
+              --repo . --strict --json \
+              > "$ARTIFACTS_DIR/proposals-result.json" 2> "$ARTIFACTS_DIR/proposals-error.json"
+          else
+            node .aro-engine/packages/aro-cli/dist/cli.js proposals check \
+              --repo . --json \
+              > "$ARTIFACTS_DIR/proposals-result.json" 2> "$ARTIFACTS_DIR/proposals-error.json"
+          fi
+          code=$?
+          set -e
+
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+            if [ -s "$ARTIFACTS_DIR/proposals-error.json" ]; then
+              cat "$ARTIFACTS_DIR/proposals-error.json" >&2
+            else
+              echo "proposals checkが予期しない終了コード $code で失敗しました。" >&2
+            fi
+            exit "$code"
+          fi
+
+          if ! jq -r '
+            def esc: tostring | gsub("\\|"; "\\|") | gsub("\r"; "") | gsub("\n"; "<br>");
+            .report.findings[]
+            | select(.status != "pass")
+            | "| \(.status|esc) | \((.entryId // "-")|esc) | \((.path // "-")|esc) | \(.message|esc) |"
+          ' "$ARTIFACTS_DIR/proposals-result.json" > "$ARTIFACTS_DIR/proposals-findings.md"; then
+            echo "proposals checkのJSON結果を処理できませんでした。" >&2
+            echo "exit_code=3" >> "$GITHUB_OUTPUT"
+            exit 3
+          fi
+
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          # exit 1（検証FAIL）はsummary出力後に専用stepでfailさせる。
+          exit 0
+
       - name: Write step summary
         if: always()
         env:
           SKIP: ${{ steps.gate.outputs.skip }}
           SKIP_REASON: ${{ steps.gate.outputs.reason }}
+          MODE: ${{ steps.gate.outputs.mode }}
           GUARD_EXIT: ${{ steps.guard.outputs.exit_code }}
           GUARD_WARN_COUNT: ${{ steps.guard.outputs.warn_count }}
           NOT_GUARDABLE: ${{ steps.guard.outputs.not_guardable }}
@@ -239,6 +327,10 @@ jobs:
           KNOWLEDGE_SKIP_REASON: ${{ steps.knowledge.outputs.reason }}
           KNOWLEDGE_EXIT: ${{ steps.knowledge.outputs.exit_code }}
           KNOWLEDGE_STRICT: ${{ steps.knowledge.outputs.strict }}
+          PROPOSALS_RUN: ${{ steps.proposals_gate.outputs.run }}
+          PROPOSALS_SKIP_REASON: ${{ steps.proposals_gate.outputs.reason }}
+          PROPOSALS_EXIT: ${{ steps.proposals.outputs.exit_code }}
+          PROPOSALS_STRICT: ${{ steps.proposals.outputs.strict }}
           ARTIFACTS_DIR: ${{ steps.artifacts.outputs.dir }}
         run: |
           {
@@ -247,6 +339,8 @@ jobs:
             if [ "$SKIP" = "true" ]; then
               echo "- 状態: **skipped**"
               echo "- 理由: $SKIP_REASON"
+            elif [ "$MODE" = "push" ]; then
+              echo "- 状態: **skipped** — push イベントでは guard を実行しない（PR の diff に対してのみ実行する）"
             elif [ "$NOT_GUARDABLE" = "true" ]; then
               echo "- 状態: **skipped**（検証ルール不在: \`$ERROR_CODE\`）"
               echo "- base に \`.ai/project.yaml\` / policy が無いため guard は検証できない。"
@@ -283,6 +377,8 @@ jobs:
             echo ""
             if [ "$SKIP" = "true" ]; then
               echo "- 状態: **skipped** — workflow自体がskip"
+            elif [ "$MODE" = "push" ]; then
+              echo "- 状態: **skipped** — pushイベントではknowledge checkを実行しない"
             elif [ "$KNOWLEDGE_SKIP" = "true" ]; then
               echo "- 状態: **skipped**"
               echo "- 理由: $KNOWLEDGE_SKIP_REASON"
@@ -305,6 +401,36 @@ jobs:
               fi
             else
               echo "- 状態: **error**（knowledge exit: ${KNOWLEDGE_EXIT:-unknown}）— job logを参照"
+            fi
+
+            echo ""
+            echo "## Proposals"
+            echo ""
+            if [ "$SKIP" = "true" ]; then
+              echo "- 状態: **skipped** — workflow自体がskip"
+            elif [ "$PROPOSALS_RUN" = "false" ]; then
+              echo "- 状態: **skipped**"
+              echo "- 理由: $PROPOSALS_SKIP_REASON"
+            elif [ "$PROPOSALS_EXIT" = "0" ] || [ "$PROPOSALS_EXIT" = "1" ]; then
+              if [ "$PROPOSALS_EXIT" = "0" ]; then
+                echo "- 状態: **checked** — blocking failureなし"
+              else
+                echo "- 状態: **failures found** — このjobはfailする"
+              fi
+              echo "- mode: \`${MODE:-unknown}\`（pushでは並行PR由来のid重複の検出が主目的）"
+              echo "- strict: \`${PROPOSALS_STRICT:-false}\`"
+              echo "- proposals: $(jq -r '.report.summary.entries' "$ARTIFACTS_DIR/proposals-result.json")"
+              echo "- warnings: $(jq -r '.report.summary.warned' "$ARTIFACTS_DIR/proposals-result.json")"
+              echo "- failures: $(jq -r '.report.summary.failed' "$ARTIFACTS_DIR/proposals-result.json")"
+              echo "- stale: $(jq -r '.report.summary.stale' "$ARTIFACTS_DIR/proposals-result.json")"
+              if [ -s "$ARTIFACTS_DIR/proposals-findings.md" ]; then
+                echo ""
+                echo "| status | proposal | path | 内容 |"
+                echo "|---|---|---|---|"
+                cat "$ARTIFACTS_DIR/proposals-findings.md"
+              fi
+            else
+              echo "- 状態: **error**（proposals exit: ${PROPOSALS_EXIT:-unknown}）— job logを参照"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -340,4 +466,10 @@ jobs:
         if: steps.knowledge.outputs.exit_code == '1'
         run: |
           echo "aro knowledge check がblocking failureを検出しました。詳細はstep summaryを参照してください。"
+          exit 1
+
+      - name: Fail on proposals violations
+        if: steps.proposals.outputs.exit_code == '1'
+        run: |
+          echo "aro proposals check がblocking failureを検出しました。詳細はstep summaryを参照してください。"
           exit 1

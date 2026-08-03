@@ -11,6 +11,24 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Added
+
+- Proposal Loop（Stage 1-3）: `aro guard` に `proposal_decision` violation を追加。提案
+  （`.ai/local/proposals/*.md`）の frontmatter `status` を merge-base 側と HEAD 側で比較する、
+  guard 初の内容ベース判定で、人間のみが行える遷移（採否の変更・`open` 以外での新規追加・
+  提案ファイルの削除）を `severity: fail` として表面化させる（（なし）→ `open`、
+  `accepted` → `done`、status を変えない編集は違反にしない）。
+- `propose.md` を managed prompt として配布。提案は `status: open` の新規ファイルとしてのみ
+  書き、採否の判断・順位付けは行わない（採否は常に人間が記録する）。
+- 配布 seed の `project.yaml.hbs` の `ai.allowed_paths` に `.ai/local/proposals/**` を追加し、
+  `proposal.schema.json` の managed copy（`.ai/managed/schemas/`）を配布対象に追加
+  （distribution version 0.1.7）。配布 policy 3 ファイルの severity map に
+  `proposal_decision: fail` を明示列挙。
+- CI（reusable AI Review workflow）に `aro proposals check` を追加。pull_request では
+  guard / knowledge check と並んで実行し（proposals 変更を含む PR は `--strict`）、
+  default branch への push では proposals check のみを実行して、並行 PR の merge で混入した
+  proposal id の重複を merge 後の状態で決定的に検出する。
+
 ### Fixed
 
 - knowledge / proposal の source path 検証が失敗したとき、本来の検証メッセージが

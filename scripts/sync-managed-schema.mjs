@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** authoritative → managed copy の同期対象。 */
-const SCHEMAS = ["project.schema.json", "knowledge.schema.json"].map((filename) => ({
+const SCHEMAS = ["project.schema.json", "knowledge.schema.json", "proposal.schema.json"].map((filename) => ({
   authoritative: path.join(ROOT, "schemas", filename),
   managedCopy: path.join(
     ROOT,

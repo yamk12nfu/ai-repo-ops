@@ -19,6 +19,7 @@ severity:
   workflow: fail
   project_config: fail
   forbidden_path: fail
+  proposal_decision: fail
   outside_allowed_paths: fail
   too_many_files: fail
   too_many_added_lines: fail
