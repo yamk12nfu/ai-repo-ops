@@ -402,3 +402,96 @@ describe("runGuard: severity", () => {
     expect(report.hasFailures).toBe(true);
   });
 });
+
+describe("runGuard: proposal_decision", () => {
+  const PROPOSAL_PATH = ".ai/local/proposals/2026-08-sample.md";
+
+  it("違反になる遷移は proposal_decision violation として報告される（既定 severity は fail）", () => {
+    const report = runGuard({
+      changedFiles: [file(PROPOSAL_PATH)],
+      projectConfig: projectConfig({ allowedPaths: [".ai/local/proposals/**"] }),
+      policy: policy(),
+      proposalTransitions: [
+        {
+          path: PROPOSAL_PATH,
+          base: { kind: "proposal", status: "open" },
+          head: { kind: "proposal", status: "accepted" },
+        },
+      ],
+    });
+
+    expect(report.violations).toEqual([
+      expect.objectContaining({
+        kind: "proposal_decision",
+        path: PROPOSAL_PATH,
+        severity: "fail",
+      }),
+    ]);
+    expect(report.hasFailures).toBe(true);
+  });
+
+  it("正常な遷移（なし → open）は違反にならない", () => {
+    const report = runGuard({
+      changedFiles: [file(PROPOSAL_PATH)],
+      projectConfig: projectConfig({ allowedPaths: [".ai/local/proposals/**"] }),
+      policy: policy(),
+      proposalTransitions: [
+        { path: PROPOSAL_PATH, base: { kind: "absent" }, head: { kind: "proposal", status: "open" } },
+      ],
+    });
+
+    expect(report.violations).toEqual([]);
+    expect(report.hasFailures).toBe(false);
+  });
+
+  it("policy の severity 表で warn を指定しても、遷移の違反は報告される（severity は表に従う）", () => {
+    const report = runGuard({
+      changedFiles: [file(PROPOSAL_PATH)],
+      projectConfig: projectConfig({ allowedPaths: [".ai/local/proposals/**"] }),
+      policy: policy({ severity: { proposal_decision: "warn" } }),
+      proposalTransitions: [
+        {
+          path: PROPOSAL_PATH,
+          base: { kind: "proposal", status: "open" },
+          head: { kind: "proposal", status: "rejected" },
+        },
+      ],
+    });
+
+    expect(report.violations).toEqual([
+      expect.objectContaining({ kind: "proposal_decision", severity: "warn" }),
+    ]);
+    expect(report.hasFailures).toBe(false);
+  });
+
+  it("proposalTransitions 未指定なら proposal_decision は判定しない", () => {
+    const report = runGuard({
+      changedFiles: [file(PROPOSAL_PATH)],
+      projectConfig: projectConfig({ allowedPaths: [".ai/local/proposals/**"] }),
+      policy: policy(),
+    });
+
+    expect(report.violations).toEqual([]);
+  });
+
+  it("allowed_paths 外の proposal 遷移は outside_allowed_paths と proposal_decision の両方を報告する", () => {
+    const report = runGuard({
+      changedFiles: [file(PROPOSAL_PATH)],
+      projectConfig: projectConfig({ allowedPaths: ["src/**"] }),
+      policy: policy(),
+      proposalTransitions: [
+        {
+          path: PROPOSAL_PATH,
+          base: { kind: "proposal", status: "open" },
+          head: { kind: "absent" },
+        },
+      ],
+    });
+
+    expect(report.violations).toHaveLength(2);
+    expect(report.violations.map((v) => v.kind).sort()).toEqual([
+      "outside_allowed_paths",
+      "proposal_decision",
+    ]);
+  });
+});

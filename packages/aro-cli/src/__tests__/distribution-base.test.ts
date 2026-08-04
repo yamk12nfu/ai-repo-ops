@@ -236,7 +236,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(loaded.manifest.name).toBe("base");
     expect(loaded.manifest.schema_version).toBe(1);
 
-    // managed files: prompts 5件 + policies 3件 + schemas 2件。
+    // managed files: prompts 6件 + policies 3件 + schemas 3件。
     expect(loaded.managedFiles.map((file) => file.dest).sort()).toEqual(
       [
         ".ai/managed/policies/default.yaml",
@@ -245,10 +245,12 @@ describe("distribution/base（Phase 3 完了条件）", () => {
         ".ai/managed/prompts/improve.md",
         ".ai/managed/prompts/issue-fix.md",
         ".ai/managed/prompts/knowledge-refresh.md",
+        ".ai/managed/prompts/propose.md",
         ".ai/managed/prompts/release-check.md",
         ".ai/managed/prompts/review.md",
         ".ai/managed/schemas/knowledge.schema.json",
         ".ai/managed/schemas/project.schema.json",
+        ".ai/managed/schemas/proposal.schema.json",
       ].sort(),
     );
     // 各 managed file は中身があり、canonical sha256 を持つ。
@@ -429,7 +431,10 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(isPlainObject(concurrency)).toBe(true);
     if (!isPlainObject(concurrency)) return;
 
-    expect(concurrency["group"]).toBe("ai-review-${{ github.event.pull_request.number }}");
+    // push（default branch）でも実行するため、PR番号が無いイベントでは ref で系列を分ける。
+    expect(concurrency["group"]).toBe(
+      "ai-review-${{ github.event.pull_request.number || github.ref }}",
+    );
     expect(concurrency["cancel-in-progress"]).toBe(true);
   });
 

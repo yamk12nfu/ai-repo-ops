@@ -23,6 +23,9 @@ severity:
   workflow: fail
   project_config: fail
   forbidden_path: fail
+  # 提案の採否は人間のみが行う遷移。AI が自分に有利な状態変更を人間に気づかれず通す経路を
+  # 塞ぐため、project_config と同じく fail（人間が内容を確認して override）とする。
+  proposal_decision: fail
   outside_allowed_paths: warn
   too_many_files: warn
   too_many_added_lines: warn

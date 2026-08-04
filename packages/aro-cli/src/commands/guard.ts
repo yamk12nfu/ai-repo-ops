@@ -36,6 +36,11 @@ import { LOCKFILE_RELATIVE_PATH, parseLockFile } from "../core/lockfile.js";
 import { PROJECT_YAML_PATH } from "../core/manifest.js";
 import { parsePolicy, policyPathForRiskLevel, type Policy } from "../core/policy.js";
 import { parseProjectConfig, type ProjectConfig, type RiskLevel } from "../core/project-config.js";
+import {
+  isProposalDecisionTarget,
+  proposalFileStateFromText,
+  type ProposalTransition,
+} from "../core/proposal-decision.js";
 import { loadDistribution, resolveSourceRoot } from "../core/source.js";
 import {
   authenticateSyncChange,
@@ -121,6 +126,32 @@ async function loadPolicyAtRevision(
 }
 
 /**
+ * 変更ファイルのうち proposal（`.ai/local/proposals/*.md`）について、merge-base 側と HEAD 側の
+ * 内容を読み {@link ProposalTransition} を組み立てる（`proposal_decision` の判定入力）。
+ *
+ * HEAD 側も working tree ではなく revision `HEAD` から読む。diff が `<merge-base>...HEAD` である
+ * ことと対象を一致させるため（未 commit の変更は diff に現れず、guard の検証対象外）。
+ */
+async function collectProposalTransitions(
+  repoRoot: string,
+  mergeBaseSha: string,
+  changedFiles: readonly { path: string }[],
+): Promise<ProposalTransition[]> {
+  const transitions: ProposalTransition[] = [];
+  for (const file of changedFiles) {
+    if (!isProposalDecisionTarget(file.path)) continue;
+    const baseText = await readFileAtRevision(repoRoot, mergeBaseSha, file.path);
+    const headText = await readFileAtRevision(repoRoot, "HEAD", file.path);
+    transitions.push({
+      path: file.path,
+      base: proposalFileStateFromText(baseText),
+      head: proposalFileStateFromText(headText),
+    });
+  }
+  return transitions;
+}
+
+/**
  * guard を実行し終了コードを返す（process.exit には触れない）。
  * 出力は {@link GuardIo} 経由で行うため、テストから writer を差し替えて検証できる。
  */
@@ -161,6 +192,12 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
       }
     }
 
+    const proposalTransitions = await collectProposalTransitions(
+      repoRoot,
+      mergeBaseSha,
+      changedFiles,
+    );
+
     const report: GuardReport = runGuard({
       changedFiles,
       projectConfig,
@@ -168,6 +205,7 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
       trustedSyncPaths: new Set(
         trustedSync.status === "authenticated" ? trustedSync.paths : [],
       ),
+      proposalTransitions,
     });
 
     if (options.json) {

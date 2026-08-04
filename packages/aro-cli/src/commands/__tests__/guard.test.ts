@@ -713,3 +713,193 @@ describe("executeGuard: trusted aro sync", () => {
     });
   });
 });
+
+describe("executeGuard: proposal_decision（提案の採否遷移）", () => {
+  const PROPOSAL_REL = ".ai/local/proposals/2026-08-sample.md";
+
+  /** allowed_paths に proposals を含む medium risk の project.yaml。 */
+  const PROPOSALS_PROJECT_YAML = `schema_version: 1
+project:
+  name: demo
+  type: generic
+  risk_level: medium
+commands:
+  lint: ""
+quality_gates:
+  required: []
+ai:
+  max_changed_files: 5
+  allowed_paths:
+    - "src/**"
+    - ".ai/local/proposals/**"
+review:
+  require_human_review: true
+evals: {}
+`;
+
+  /**
+   * proposal テスト用 policy。SYNC_FIXTURE_POLICY_DEFAULT は `max_added_lines: 5` で、
+   * frontmatter を持つ提案ファイルの追加だけで超過してしまうため、配布 policy 相当の上限にする。
+   */
+  const PROPOSALS_POLICY = `schema_version: 1
+name: default
+change_limits:
+  max_changed_files: 10
+  max_added_lines: 400
+forbidden_paths:
+  - "secrets/**"
+`;
+
+  function proposalText(status: string, body = "## 課題\n本文\n"): string {
+    return [
+      "---",
+      "schema_version: 1",
+      "id: sample-proposal",
+      `status: ${status}`,
+      "proposed_at_commit: 0123456789abcdef0123456789abcdef01234567",
+      "sources:",
+      "  - path: src/index.ts",
+      "---",
+      "",
+      body,
+    ].join("\n");
+  }
+
+  async function setupProposalsRepo(): Promise<void> {
+    await writeRaw(repoRoot, ".ai/project.yaml", PROPOSALS_PROJECT_YAML);
+    await writeRaw(repoRoot, ".ai/managed/policies/default.yaml", PROPOSALS_POLICY);
+    await gitCommitAll(repoRoot, "chore: init project config and policy");
+  }
+
+  it("status: open の新規提案は違反にならない（propose PR がノイズで落ちない）", async () => {
+    await setupProposalsRepo();
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("open"));
+    await gitCommitAll(repoRoot, "docs(proposals): add proposal");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+    expect(cap.out()).not.toContain("proposal_decision");
+  });
+
+  it("status: accepted の新規追加は proposal_decision で exit 1（新規ファイル免除の迂回を塞ぐ）", async () => {
+    await setupProposalsRepo();
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("accepted"));
+    await gitCommitAll(repoRoot, "docs(proposals): add pre-accepted proposal");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+    expect(cap.out()).toContain("proposal_decision");
+    expect(cap.out()).toContain("status: open でのみ追加できます");
+  });
+
+  it("open → accepted の採否変更は proposal_decision で exit 1（人間の override を要求）", async () => {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("open"));
+    await gitCommitAll(repoRoot, "docs(proposals): add proposal");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("accepted"));
+    await gitCommitAll(repoRoot, "docs(proposals): accept proposal");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+    expect(cap.out()).toContain("open → accepted");
+  });
+
+  it("accepted → done は違反にならない（実装 PR がノイズで落ちない）", async () => {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("accepted"));
+    await gitCommitAll(repoRoot, "docs(proposals): accepted proposal on main");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("done"));
+    await writeRaw(repoRoot, "src/index.ts", "export const x = 1;\n");
+    await gitCommitAll(repoRoot, "feat: implement proposal and close it");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+    expect(cap.out()).not.toContain("proposal_decision");
+  });
+
+  it("status を変えない本文の編集（破棄の記録の追記等）は違反にならない", async () => {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("accepted"));
+    await gitCommitAll(repoRoot, "docs(proposals): accepted proposal on main");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(
+      repoRoot,
+      PROPOSAL_REL,
+      proposalText("accepted", "## 課題\n本文\n\n## 実装の破棄\n2026-08-04 guard 違反を解消できず破棄。\n"),
+    );
+    await gitCommitAll(repoRoot, "docs(proposals): record abandoned attempt");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+    expect(cap.out()).not.toContain("proposal_decision");
+  });
+
+  it("提案ファイルの削除は proposal_decision で exit 1（提案が消えないことの担保）", async () => {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("rejected"));
+    await gitCommitAll(repoRoot, "docs(proposals): rejected proposal on main");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await rm(path.join(repoRoot, PROPOSAL_REL));
+    await gitCommitAll(repoRoot, "docs(proposals): delete proposal");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+    expect(cap.out()).toContain("proposal_decision");
+    expect(cap.out()).toContain("削除");
+  });
+
+  it("HEAD 側の frontmatter が壊れている場合は「遷移を判定できない」として exit 1", async () => {
+    await setupProposalsRepo();
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, "# frontmatter が無い proposal\n");
+    await gitCommitAll(repoRoot, "docs(proposals): broken proposal");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+    expect(cap.out()).toContain("判定できません");
+  });
+
+  it("未 commit の proposal 変更は判定対象にならない（diff は merge-base...HEAD）", async () => {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("open"));
+    await gitCommitAll(repoRoot, "docs(proposals): add proposal");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    // working tree でのみ採否を変更（commit しない）
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("accepted"));
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main" }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+  });
+
+  it("--json の violations に proposal_decision が入る", async () => {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("open"));
+    await gitCommitAll(repoRoot, "docs(proposals): add proposal");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("superseded"));
+    await gitCommitAll(repoRoot, "docs(proposals): supersede proposal");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main", json: true }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+    const parsed = JSON.parse(cap.out()) as {
+      report: { violations: { kind: string; path?: string; severity: string }[] };
+    };
+    const violation = parsed.report.violations.find((v) => v.kind === "proposal_decision");
+    expect(violation).toBeDefined();
+    expect(violation?.path).toBe(PROPOSAL_REL);
+    expect(violation?.severity).toBe("fail");
+  });
+});

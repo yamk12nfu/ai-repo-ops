@@ -26,6 +26,7 @@ aro guard --repo /path/to/your-repo --base main --json   # 機械可読出力
 | `outside_allowed_paths` | `ai.allowed_paths` 定義時、そのいずれにも一致しない変更（未定義なら検査しない） |
 | `too_many_files` | 変更ファイル数が上限超過（`ai.max_changed_files` と policy の `change_limits.max_changed_files` の厳しい方） |
 | `too_many_added_lines` | 追加行数合計が policy の `change_limits.max_added_lines` を超過 |
+| `proposal_decision` | 提案（`.ai/local/proposals/*.md`）の採否・状態の遷移のうち、人間のみが行えるもの（下記「proposal_decision の扱い」参照） |
 
 glob 評価は `picomatch`（`dot: true, nocase: true`。distribution の保護 path 判定と同じ規約）。
 `risk_level` → 適用 policy の対応は `low` → `low-risk.yaml` / `medium` → `default.yaml` /
@@ -129,6 +130,33 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
 にはしない（警告どまりだと設定変更が誰にも見られずに通りうるため）。警告レベル
 （`severity: warn | fail`）の導入は、運用してこの扱いが厳しすぎると分かった時点で検討する。
 対象 repo 側から見た具体的な確認・override 手順は [`onboarding.md`](./onboarding.md) を参照。
+
+## proposal_decision の扱い（運用方針）
+
+提案（`.ai/local/proposals/*.md`。[計画 06](./plans/06-proposal-loop.md)）の採否を判断するのは
+**常に人間**である。guard は merge-base 側と HEAD 側の frontmatter `status` を比較し
+（**guard 初の、path ではなくファイル内容に基づく判定**）、人間のみが行える遷移を
+`proposal_decision` violation として報告する。
+
+違反に**しない**遷移（propose / improve ループの正常な出力がノイズで落ちない）:
+
+- （なし）→ `open`: 新規提案の追加（propose プロンプトの正常な出力）
+- `accepted` → `done`: 採用済み提案の実装完了（実装 PR の正常な出力）
+- `status` が変わらない編集: 実装破棄の記録の追記など
+
+違反に**する**遷移（`severity: fail`。人間が内容を確認して override する）:
+
+- `open` → `accepted` / `rejected`、任意 → `superseded` などの status 変更: 採否は人間のみが行う
+- （なし）→ `open` **以外**での新規追加: 最初から `accepted` のファイルを生やして採否検証を
+  迂回する経路を塞ぐ
+- 提案ファイルの削除: 「提案が消えないこと」の担保。提案は削除せず status で閉じる
+- frontmatter から `status` を読めない変更: 遷移を判定できない
+
+機械は「誰が編集したか」を判別できないため、これは**強制ではなく可視化**である。採否の変更を
+含む PR は required check が落ちた状態になり、人間が内容を確認したうえで明示的に override して
+merge する（`project_config` と同じ運用。緩めない理由も同じで、AI が自分に有利な状態変更を
+人間に気づかれずに通す経路を塞ぐため）。frontmatter の schema 妥当性（`decision.by` の必須性等）は
+`aro proposals check` の責務であり、guard は遷移の判定に必要な `status` だけを読む。
 
 ## `--json` 出力
 

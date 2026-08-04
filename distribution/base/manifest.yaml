@@ -1,6 +1,6 @@
 schema_version: 1
 name: base
-version: 0.1.6
+version: 0.1.7
 
 files:
   - src: files/.ai/managed/prompts/review.md
@@ -23,6 +23,10 @@ files:
     dest: .ai/managed/prompts/release-check.md
     strategy: managed_overwrite
 
+  - src: files/.ai/managed/prompts/propose.md
+    dest: .ai/managed/prompts/propose.md
+    strategy: managed_overwrite
+
   - src: files/.ai/managed/policies/default.yaml
     dest: .ai/managed/policies/default.yaml
     strategy: managed_overwrite
@@ -41,6 +45,10 @@ files:
 
   - src: files/.ai/managed/schemas/knowledge.schema.json
     dest: .ai/managed/schemas/knowledge.schema.json
+    strategy: managed_overwrite
+
+  - src: files/.ai/managed/schemas/proposal.schema.json
+    dest: .ai/managed/schemas/proposal.schema.json
     strategy: managed_overwrite
 
 seed_files:
@@ -68,6 +76,7 @@ patches:
       - ".ai/project.yaml text eol=lf"
       - ".ai/ai-repo-ops.lock.yaml text eol=lf"
       - ".ai/local/knowledge/** text eol=lf"
+      - ".ai/local/proposals/** text eol=lf"
       - ".github/workflows/ai-*.yml text eol=lf"
 
   - type: append_unique_lines

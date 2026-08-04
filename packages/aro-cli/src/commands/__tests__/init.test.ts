@@ -281,9 +281,9 @@ describe("executeInit: 実 distribution/base に対するエンドツーエン�
     expect(await read(".prettierignore")).toContain(".ai/managed/");
     expect(await read(".prettierignore")).toContain(".ai/ai-repo-ops.lock.yaml");
 
-    // lock に 10 件の managed file が記録される。
+    // lock に 12 件の managed file が記録される（prompts 6 + policies 3 + schemas 3）。
     const lock = parseLockFile(await read(LOCKFILE_RELATIVE_PATH));
-    expect(lock.managed_files).toHaveLength(10);
+    expect(lock.managed_files).toHaveLength(12);
 
     // init 直後の diff は up to date。
     const diffCap = { out: [] as string[], err: [] as string[] };
