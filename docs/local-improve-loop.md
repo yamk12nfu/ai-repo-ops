@@ -50,7 +50,9 @@ CI への書き込み権限の追加は一切不要。
    `.ai/managed/policies/*.yaml`）を読み、改善を 1 つ実施する。改善対象は
    `.ai/local/proposals/**` の **`status: accepted` の提案から 1 件選ぶのが既定**
    （accepted が無い場合のみ、小さく安全な改善を自分で選ぶ）。提案の作成・採否の記録は
-   [`proposal-loop.md`](./proposal-loop.md) を参照。
+   [`proposal-loop.md`](./proposal-loop.md) を参照。この既定は distribution **0.1.8 以降**の
+   improve.md（と `ai.allowed_paths` の `.ai/local/proposals/**`）が前提であり、それより古い
+   repo は先に `aro sync`（+ 設定専用 PR）で更新する。
 
 3. **自己検証**: AI（または開発者）がローカルで次の両方を通す。
 
@@ -67,8 +69,8 @@ CI への書き込み権限の追加は一切不要。
 
 4. **PR 作成**: 開発者が変更内容を確認したうえで PR を作成する（開発者自身の GitHub 権限を使う。
    CI 用の書き込み権限は増えない）。タイトル規約: **`chore(ai-improve): <改善の要約>`**。
-   PR 本文には improve.md の出力（改善の目的 / 変更ファイル / 自己検証の結果 / 実装した提案の id）を
-   含める。実装中に見つけた新しい改善候補は PR 本文ではなく、propose プロンプトで
+   PR 本文には improve.md の出力（改善の目的 / 変更ファイル / 自己検証の結果 / 実装した提案の id。
+   自選の改善の場合は id を「なし」と明記）を含める。実装中に見つけた新しい改善候補は PR 本文ではなく、propose プロンプトで
    `.ai/local/proposals/` に提案ファイルとして書き出す（[`proposal-loop.md`](./proposal-loop.md) 参照）。
 
 5. **CI の最終検証**: PR を開くと中央配布の workflow が `aro guard` を再実行する

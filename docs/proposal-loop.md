@@ -17,7 +17,8 @@
 │  └ 新しい提案を書く（open）     │        └──────────────────────────┘
 └──────────────────────────────┘              │
         ▲                                      ▼
-        │                          人間が status を書く（accepted / rejected + 理由）
+        │                          人間が status を書く（accepted / rejected。
+        │                            rejected / superseded は理由必須）
         │                          → guard の proposal_decision が fail
         │                          → 人間が内容を確認して override merge
         │                                      │
