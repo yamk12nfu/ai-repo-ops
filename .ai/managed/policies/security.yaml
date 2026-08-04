@@ -1,0 +1,55 @@
+# ai-repo-ops managed policy: security
+# 直接編集しないでください（変更は中央 ai-repo-ops 側で行います）。
+# risk_level: high / セキュリティ重要 repo 向け。最も厳しい制約を適用する。
+
+schema_version: 1
+name: security
+description: high リスク向けの厳格ポリシー。変更を最小に抑え、人間レビューを必須にする。
+
+change_limits:
+  max_changed_files: 5
+  max_added_lines: 150
+
+# violation ごとの扱い。high リスク repo では**すべて fail のまま維持する**。
+# 変更範囲そのものが監査対象であり、人間の PR であっても範囲逸脱は明示的な
+# override（人間の確認）を経るべきという判断による（default.yaml とは意図的に異なる）。
+# この摩擦を受け入れられない repo は risk_level を medium にすることで選択できる。
+severity:
+  managed_file: fail
+  workflow: fail
+  project_config: fail
+  forbidden_path: fail
+  proposal_decision: fail
+  outside_allowed_paths: fail
+  too_many_files: fail
+  too_many_added_lines: fail
+
+review:
+  require_human_review: true
+  auto_merge: false
+  block_on:
+    - failing_required_gates
+    - secret_detected
+    - forbidden_path_modified
+    - managed_file_edited
+    - dependency_added
+    - public_api_changed
+
+allowed_actions:
+  - fix_bug
+  - add_test
+
+forbidden_paths:
+  - ".env"
+  - ".env.*"
+  - "secrets/**"
+  - "infra/**"
+  - ".github/workflows/**"
+  - "**/Dockerfile"
+  - "**/*.tf"
+
+quality_gates:
+  required:
+    - lint
+    - typecheck
+    - test

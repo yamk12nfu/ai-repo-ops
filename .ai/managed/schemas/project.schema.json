@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/yamk12nfu/ai-repo-ops/schemas/project.schema.json",
+  "title": "ai-repo-ops project.yaml",
+  "description": "対象 repo の .ai/project.yaml を検証する authoritative schema。ai-repo-ops source 側の唯一の正。.ai/managed/schemas/project.schema.json はこの schema から生成されるエディタ補完用コピー。",
+  "type": "object",
+  "required": ["schema_version", "project", "commands", "quality_gates", "ai"],
+  "properties": {
+    "schema_version": {
+      "description": "project.yaml schema のバージョン。MVP は 1 のみ。",
+      "const": 1
+    },
+    "project": {
+      "description": "repo 固有のメタ情報。",
+      "type": "object",
+      "required": ["name", "type", "risk_level"],
+      "properties": {
+        "name": {
+          "description": "repo 名（init 時に repo ディレクトリ名で埋める）。",
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "description": "repo の種別。言語/FW に依存しない汎用識別子（例: generic, node, python, go）。",
+          "type": "string",
+          "minLength": 1
+        },
+        "risk_level": {
+          "description": "変更リスクレベル。AI ハーネスの慎重さを決める。",
+          "type": "string",
+          "enum": ["low", "medium", "high"]
+        },
+        "owner": {
+          "description": "オーナー（個人 / チーム）。未設定なら unknown。",
+          "type": "string"
+        }
+      }
+    },
+    "runtime": {
+      "description": "実行環境設定。",
+      "type": "object",
+      "properties": {
+        "devcontainer": {
+          "description": "devcontainer 設定への参照。未使用なら null。",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "commands": {
+      "description": "repo の標準コマンド。空文字は未設定を表し doctor で WARN（init 直後は言語/FW 不明のため FAIL にしない）。",
+      "type": "object",
+      "properties": {
+        "setup": { "type": "string" },
+        "lint": { "type": "string" },
+        "typecheck": { "type": "string" },
+        "test": { "type": "string" },
+        "build": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "quality_gates": {
+      "description": "PR / 改善で必須にする品質ゲート。required の各要素は commands のキーを指す。",
+      "type": "object",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "ai": {
+      "description": "AI ハーネスの動作制約。",
+      "type": "object",
+      "properties": {
+        "max_loops": {
+          "description": "1 セッションあたりの最大改善ループ回数。",
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_changed_files": {
+          "description": "1 回の変更で触れてよい最大ファイル数。",
+          "type": "integer",
+          "minimum": 1
+        },
+        "allowed_paths": {
+          "description": "AI が変更してよい path の glob。",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "forbidden_paths": {
+          "description": "AI が変更してはいけない path の glob。",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "review": {
+      "description": "レビュー / マージ方針。",
+      "type": "object",
+      "properties": {
+        "create_pr": { "type": "boolean" },
+        "require_human_review": { "type": "boolean" },
+        "auto_merge": { "type": "boolean" }
+      }
+    },
+    "evals": {
+      "description": "将来の eval 定義置き場。MVP では空オブジェクト。",
+      "type": "object"
+    }
+  }
+}

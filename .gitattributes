@@ -1,0 +1,7 @@
+# ai-repo-ops managed text files
+.ai/managed/** text eol=lf
+.ai/project.yaml text eol=lf
+.ai/ai-repo-ops.lock.yaml text eol=lf
+.ai/local/knowledge/** text eol=lf
+.ai/local/proposals/** text eol=lf
+.github/workflows/ai-*.yml text eol=lf

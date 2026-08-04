@@ -1,0 +1,58 @@
+# ai-repo-ops managed policy: default
+# 直接編集しないでください（変更は中央 ai-repo-ops 側で行います）。
+# risk_level: medium のリポジトリ向けの既定ポリシー。
+
+schema_version: 1
+name: default
+description: medium リスク向けの標準ポリシー。安全側に倒しつつ通常の改善を許可する。
+
+change_limits:
+  max_changed_files: 10
+  max_added_lines: 400
+
+# violation ごとの扱い。fail は required check を落とし、warn は報告のみ行う。
+# 表に無い kind は fail 扱い。
+#
+# 不変条件（誰が変更しても危険なもの）は fail のまま維持する。
+# allowed_paths / change_limits は「AI が変更してよい範囲」を定める設定であり、
+# 人間が書いた feature PR にこれを required check として課すのは定義の誤用で、
+# override merge の常態化を招くため warn とする。AI に対する強制は
+# `.ai/managed/prompts/improve.md` の自己検証（警告も中止条件）と人間レビューで担保する。
+severity:
+  managed_file: fail
+  workflow: fail
+  project_config: fail
+  forbidden_path: fail
+  # 提案の採否は人間のみが行う遷移。AI が自分に有利な状態変更を人間に気づかれず通す経路を
+  # 塞ぐため、project_config と同じく fail（人間が内容を確認して override）とする。
+  proposal_decision: fail
+  outside_allowed_paths: warn
+  too_many_files: warn
+  too_many_added_lines: warn
+
+review:
+  require_human_review: true
+  auto_merge: false
+  block_on:
+    - failing_required_gates
+    - secret_detected
+    - forbidden_path_modified
+    - managed_file_edited
+
+allowed_actions:
+  - fix_bug
+  - add_test
+  - update_docs
+  - refactor_safe
+
+forbidden_paths:
+  - ".env"
+  - ".env.*"
+  - "secrets/**"
+  - "infra/prod/**"
+  - ".github/workflows/**"
+
+quality_gates:
+  required:
+    - lint
+    - test

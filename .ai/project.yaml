@@ -1,0 +1,52 @@
+schema_version: 1
+
+project:
+  name: "ai-repo-ops"
+  type: "generic"
+  risk_level: "medium"
+  owner: "yamk12nfu"
+
+runtime:
+  devcontainer: null
+
+commands:
+  setup: "corepack enable && pnpm install --frozen-lockfile"
+  lint: "pnpm schema:check"
+  typecheck: "pnpm typecheck"
+  test: "pnpm test"
+  build: "pnpm build"
+
+quality_gates:
+  required:
+    - lint
+    - typecheck
+    - test
+    - build
+
+ai:
+  max_loops: 4
+  max_changed_files: 10
+  allowed_paths:
+    - "packages/**"
+    - "docs/**"
+    - "schemas/**"
+    - "scripts/**"
+    # distribution は配布の正本（全対象 repo に届く）。AI の改善対象に含めるが、
+    # schema の managed copy は schema:sync 生成物なので authoritative 側と同時に変える
+    - "distribution/**"
+    - "CHANGELOG.md"
+    - ".ai/local/knowledge/**"
+    - ".ai/local/proposals/**"
+  forbidden_paths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - "infra/prod/**"
+    - ".github/workflows/**"
+
+review:
+  create_pr: true
+  require_human_review: true
+  auto_merge: false
+
+evals: {}
