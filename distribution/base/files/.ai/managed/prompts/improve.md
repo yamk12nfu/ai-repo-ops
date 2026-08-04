@@ -9,7 +9,9 @@
 ## 入力
 
 - `.ai/local/proposals/**`: **改善対象の第一の供給源**。`status: accepted` の提案が実装待ちの
-  キューである（提案の作成は propose プロンプトの仕事。ここでは読むだけ）。
+  キューである。**新しい提案の作成は propose プロンプトの仕事**であり、このループで行う
+  提案ファイルの編集は「実装完了に伴う `accepted` → `done` への変更」（手順 5）と
+  「実装破棄の記録の追記」（手順 4）の 2 つだけである。
 - `.ai/project.yaml`: 特に `project.risk_level` / `ai.max_loops` / `ai.max_changed_files` /
   `ai.allowed_paths` / `ai.forbidden_paths` / `commands` / `quality_gates` / `review`。
 - `.ai/managed/policies/*.yaml`: 適用ポリシー。`project.risk_level` に対応するものを読む
@@ -39,15 +41,24 @@
 
 0. **開始前の安全確認**: `git status --short` を実行し、clean worktree であること（または専用
    branch / worktree で作業していること）を確認する。**既存の未コミット変更がある場合は、
-   開発者に確認するまで一切の変更・破棄を行わない。** 作業は専用 branch
-   （例: `git switch -c chore/ai-improve-<topic>`）で行う。
+   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を
+   実行してから、**最新の default branch を起点に**専用 branch を切る
+   （例: `git switch -c chore/ai-improve-<topic> origin/<default branch>`）。
+   古い HEAD の上で作業すると、次の手順の stale 判定が upstream の source 変更を見落とす。
 1. **改善対象を選ぶ**:
    - まず `.ai/local/proposals/**` を読み、**`status: accepted` の提案から 1 件選ぶ**ことを
      既定とする（採用済み提案は人間が実装を待っているキューである）。
-   - 選ぶ前に `aro proposals check --repo .` を実行し、その提案が **stale**（`proposed_at_commit`
-     以降に source が変わっている）と報告される場合は**実装対象に選ばない**。もう成立しない
-     診断に基づく実装になるため、人間に再確認を促し、別の accepted か自選の改善に切り替える。
-   - `accepted` が無い場合のみ、従来どおり小さく安全な改善を自分で 1 つ選ぶ
+   - 選ぶ前に `aro proposals check --repo .` を実行し、**出力の findings を確認する**。stale
+     （`proposed_at_commit` 以降に source が変わっている）は `--strict` なしでは **warn として
+     報告され exit 0 のまま**なので、exit code だけで判断せず `source.stale` の findings を読むこと。
+   - **stale と報告された accepted は実装対象に選ばない**（もう成立しない診断に基づく実装になる）。
+     stale の一覧を開発者に報告する。復帰は人間の仕事である: 開発者が根拠を現在の HEAD で
+     再確認し、`proposed_at_commit` を更新する（`status` は変えないため guard は通る）。
+   - 実装可能な（stale でない）accepted が**複数ある場合は、一覧を開発者に提示して選択を仰ぐ**
+     （提案の順位付け・選抜は AI の仕事ではない）。
+   - accepted が**すべて stale の場合は、自選の改善に進まず停止**し、開発者に再確認を求めて
+     このループを終了する（stale の滞留を自選で覆い隠さない）。
+   - `accepted` が 1 件も無い場合のみ、従来どおり小さく安全な改善を自分で 1 つ選ぶ
      （lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
 2. 変更を実施する。
 3. **自己検証を行う（両方とも通ること）**:
@@ -66,6 +77,9 @@
    提案を実装していた場合、その提案は **`accepted` のまま据え置き**（`open` へ戻さない。
    破棄されたのは実装の試みであって、人間が下した採用の判断ではない）、提案本文の
    「リスク・見送る理由になりうる点」に破棄の日時・理由・その時点の HEAD SHA を追記する。
+   **この破棄の記録は捨てない**: 実装の変更を破棄した後、提案ファイルだけの変更として
+   commit し、開発者の確認を得て PR にする（`status` が変わらないため guard の違反にならず、
+   通常どおり merge できる。記録が残ることで、同じ提案の再実装が同じ理由で失敗するのを防ぐ）。
 5. 自己検証が通ったら、改善内容を開発者に提示する。提案を実装した場合は、**その提案の
    `status` を `accepted` → `done` に変更し、同じ PR に含める**（この遷移だけは guard の
    違反にならない。実装を伴わない `done` 化は人間がレビューで却下する）。

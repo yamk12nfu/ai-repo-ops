@@ -34,9 +34,13 @@ CI への書き込み権限の追加は一切不要。
    配布済みプロンプトを読み込ませる。
 
    ```bash
-   git status --short                        # 空であること（未コミット変更を持ち込まない）
-   git switch -c chore/ai-improve-<topic>    # 専用 branch で作業する
+   git status --short                                             # 空であること（未コミット変更を持ち込まない）
+   git fetch origin <default branch>                              # stale 判定を最新の履歴で行うため先に fetch
+   git switch -c chore/ai-improve-<topic> origin/<default branch> # 最新の default branch を起点にする
    ```
+
+   古い HEAD の上で始めると、improve.md の提案選定（`aro proposals check` による stale 判定）が
+   upstream の source 変更を見落とす。
 
    ```txt
    .ai/managed/prompts/improve.md を読んで、その手順に従って改善を 1 つ実施して
@@ -86,7 +90,9 @@ CI への書き込み権限の追加は一切不要。
 この文書のループは「改善を 1 件**実施する**」ためのもの。改善候補の**提案**と人間による
 **採否の記録**は [`proposal-loop.md`](./proposal-loop.md) が担い、そこで `accepted` になった提案が
 このループの既定の入力になる（improve.md 手順 1）。実装が完了した提案は同じ PR で `done` に
-閉じる。提案の採否そのものを AI が変更することは guard（`proposal_decision`）が防ぐ。
+閉じる。提案の採否の変更は guard が `proposal_decision`（severity: fail）として required check を
+落とし、人間の確認と明示的な override を要求する（機械は編集者そのものを判別できないため、
+これは強制ではなく可視化である。[`proposal-loop.md`](./proposal-loop.md) の「限界」参照）。
 
 ## Repo Knowledge Loop との関係
 

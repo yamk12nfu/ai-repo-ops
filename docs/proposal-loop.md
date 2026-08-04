@@ -44,7 +44,9 @@
 
 - `status`: `open` / `accepted` / `rejected` / `done` / `superseded`
 - `decision.by`: `open` 以外では必須（判断した人間）。`decision.reason`: `rejected` / `superseded` で必須
-- `sources[].path` + `proposed_at_commit`: 根拠。変化すると `aro proposals check` が stale として検出する
+- `sources[].path` + `proposed_at_commit`: 根拠。`open` / `accepted` の提案は source が変化すると
+  `aro proposals check` が stale として検出する（`rejected` / `done` / `superseded` は判断が終わった
+  履歴であり、stale 判定の対象外）
 - **却下理由が次の提案の入力になる**。「なぜやらないか」を書くことに最大の価値がある
 
 ## 手順
@@ -88,10 +90,19 @@ decision:
 .ai/managed/prompts/improve.md を読んで、その手順に従って改善を 1 つ実施して
 ```
 
-improve.md は `status: accepted` の提案から 1 件選ぶことを既定とする（accepted が無い場合のみ
-自選）。stale な accepted は選ばず、人間に再確認を促す。実装が自己検証（guard + quality gates）を
-通ったら、提案の `status` を `accepted` → `done` にして同じ PR に含める（この遷移は guard の
-違反にならない）。実装を破棄した場合は `accepted` のまま据え置き、本文に破棄の記録を追記する。
+improve.md は `status: accepted` の提案から 1 件選ぶことを既定とする（accepted が 1 件も無い
+場合のみ自選）。選定のルール:
+
+- **stale な accepted は選ばない**。復帰は人間の仕事: 根拠を現在の HEAD で再確認し、
+  frontmatter の `proposed_at_commit` を更新する（`status` は変えないため guard は通る）
+- 実装可能な accepted が**複数**あるときは、AI は一覧を提示して**開発者が選ぶ**
+  （AI は順位付け・選抜をしない）
+- accepted が**すべて stale** のときは自選に進まず**停止**し、人間に再確認を求める
+
+実装が自己検証（guard + quality gates）を通ったら、提案の `status` を `accepted` → `done` に
+して同じ PR に含める（この遷移は guard の違反にならない）。実装を破棄した場合は `accepted` の
+まま据え置き、本文に破棄の記録を追記して、**記録だけの commit / PR として残す**
+（`status` が変わらないため通常どおり merge できる）。
 
 ### 4. CI の検証
 
@@ -126,9 +137,9 @@ improve.md 上の禁止の二段で「AI が黙って自分の提案を採用済
 |---|---|
 | 採否を書いた PR の guard が fail | 正常（上記手順 2）。内容を確認して override merge する |
 | 提案だけの PR で guard が fail | `status: open` 以外で追加していないか・既存提案の status を触っていないかを確認 |
-| `aro proposals check` が stale を報告 | 根拠の source が変わっている。提案を作り直すか、人間がそのまま採否を判断する |
+| `aro proposals check` が stale を報告 | 根拠の source が変わっている。人間が根拠を現在の HEAD で再確認し、`proposed_at_commit` を更新する（提案が成立しなくなっていれば `rejected` / `superseded` へ） |
 | default branch の proposals check が `id.duplicate` で fail | 並行 PR の merge で重複が混入した。どちらかの `id` を人間が変更する（`superseded` で片方を閉じるのも可） |
-| improve.md が accepted を選ばない | stale になっていないか `aro proposals check` で確認。stale なら人間が再確認する |
+| improve.md が accepted を選ばない | stale になっていないか `aro proposals check` で確認（stale は `--strict` なしでは warn / exit 0 のため、findings の `source.stale` を見る）。stale なら人間が `proposed_at_commit` を更新して復帰させる |
 
 ## dogfooding で記録すること（Stage 3）
 

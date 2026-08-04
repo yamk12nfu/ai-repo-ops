@@ -267,6 +267,16 @@ aro proposals check --repo <path> [--strict] [--json]
    - 出力の「次にやるべき改善候補」は、`propose.md` で提案ファイルに書き出す旨の案内に置き換える。
 2. `docs/proposal-loop.md`（運用手順書）を追加し、`local-improve-loop.md` から相互リンクする。
 
+> **Stage 2 実装時の設計決定**（レビューで浮いた 3 つの未決事項への回答）:
+> (1) 実装可能な accepted が複数あるときは、AI が一覧を提示して**開発者が選ぶ**（「AI は順位付け・
+> 選抜をしない」の原則を選定にも適用する）。(2) stale になった accepted の復帰は、**人間が根拠を
+> 現在の HEAD で再確認して `proposed_at_commit` を更新する**（`status` 不変のため guard を通り、
+> 1 ファイルで完結する。作り直し + `superseded` は履歴が明確だが手数が多いため既定にしない）。
+> (3) accepted が**すべて stale のときは自選に進まず停止**し、人間に再確認を求める（stale の滞留を
+> 自選で覆い隠さない）。また、選定時の stale 判定を正確にするため、improve ループは**最新の
+> default branch を起点に branch を切ってから** `aro proposals check` を実行する（古い HEAD 上の
+> 判定は upstream の source 変更を見落とす）。
+
 ### Stage 3: dogfooding
 
 - 実 repo 1 個で、提案 PR → 採否記入 → 実装 PR → `done` を最低 1 周させる。
