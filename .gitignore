@@ -17,3 +17,6 @@ coverage/
 
 # OS
 .DS_Store
+.ai/runs/
+.ai/tmp/
+.ai/logs/

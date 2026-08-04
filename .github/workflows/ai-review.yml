@@ -1,0 +1,25 @@
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  # default branch への push では proposals check のみ実行される（並行 PR の merge で混入した
+  # proposal id の重複を、merge 後の状態に対する検証で決定的に検出するため）。
+  # default branch が main 以外の repo は branches を書き換えること。
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ai_review:
+    uses: yamk12nfu/ai-repo-ops/.github/workflows/ai-review.reusable.yml@v1
+    with:
+      config_path: ".ai/project.yaml"
+      lock_path: ".ai/ai-repo-ops.lock.yaml"
