@@ -8,6 +8,8 @@
 
 ## 入力
 
+- `.ai/local/proposals/**`: **改善対象の第一の供給源**。`status: accepted` の提案が実装待ちの
+  キューである（提案の作成は propose プロンプトの仕事。ここでは読むだけ）。
 - `.ai/project.yaml`: 特に `project.risk_level` / `ai.max_loops` / `ai.max_changed_files` /
   `ai.allowed_paths` / `ai.forbidden_paths` / `commands` / `quality_gates` / `review`。
 - `.ai/managed/policies/*.yaml`: 適用ポリシー。`project.risk_level` に対応するものを読む
@@ -19,7 +21,7 @@
 以下はプロンプト上のお願いではなく、**`aro guard` と CI によって機械的に検証される**。
 `severity: fail` の違反は PR の required check が落ちるため、merge に至らない。
 `severity: warn` の違反は exit 0 で報告のみだが、この改善ループでは中止条件として扱う
-（手順 3 参照）。
+（手順 4 参照）。
 
 1. 変更してよいのは `ai.allowed_paths` に一致する path のみ。
 2. `ai.forbidden_paths`（および適用 policy の `forbidden_paths`）に一致する path は決して変更しない。
@@ -29,6 +31,9 @@
 5. `.ai/managed/**` と `.ai/ai-repo-ops.lock.yaml` は編集しない（aro が管理）。
 6. `.github/workflows/**` と `.ai/project.yaml` は編集しない（前者は既定の禁止、
    後者は変更すると guard が `project_config` violation として必ず表面化させる）。
+7. 提案ファイルの `status` の変更は、**実装完了に伴う `accepted` → `done` だけ**が許される。
+   それ以外の遷移（採否の変更・`superseded` 化・提案の削除）は人間のみが行う
+   （guard が `proposal_decision` violation として required check を落とす）。
 
 ## 進め方
 
@@ -36,7 +41,14 @@
    branch / worktree で作業していること）を確認する。**既存の未コミット変更がある場合は、
    開発者に確認するまで一切の変更・破棄を行わない。** 作業は専用 branch
    （例: `git switch -c chore/ai-improve-<topic>`）で行う。
-1. 小さく安全な改善を 1 つ選ぶ（lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
+1. **改善対象を選ぶ**:
+   - まず `.ai/local/proposals/**` を読み、**`status: accepted` の提案から 1 件選ぶ**ことを
+     既定とする（採用済み提案は人間が実装を待っているキューである）。
+   - 選ぶ前に `aro proposals check --repo .` を実行し、その提案が **stale**（`proposed_at_commit`
+     以降に source が変わっている）と報告される場合は**実装対象に選ばない**。もう成立しない
+     診断に基づく実装になるため、人間に再確認を促し、別の accepted か自選の改善に切り替える。
+   - `accepted` が無い場合のみ、従来どおり小さく安全な改善を自分で 1 つ選ぶ
+     （lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
 2. 変更を実施する。
 3. **自己検証を行う（両方とも通ること）**:
    - `git fetch origin <default branch>` してから
@@ -48,17 +60,24 @@
      AI の行動半径を広げるものではない。
    - `quality_gates.required` に対応する `commands.*` のコマンド — すべて緑であること
 4. guard 違反・gates 失敗を解消できない、または `max_changed_files` を超える場合は
-   変更を破棄し、提案だけを開発者に残す（無理に通そうとしない）。
+   変更を破棄する（無理に通そうとしない）。
    **破棄してよいのは、この改善ループで自分が作成・変更したファイルだけ。破棄前に
    対象ファイルの一覧を開発者へ提示して確認を得る。**
-5. 自己検証が通ったら、改善内容を開発者に提示する。**PR の作成は開発者の確認を得てから**
-   行う（タイトル規約: `chore(ai-improve): <改善の要約>`）。`require_human_review` が
-   true の間は自動 merge しない（merge は常に人間が判断する）。
+   提案を実装していた場合、その提案は **`accepted` のまま据え置き**（`open` へ戻さない。
+   破棄されたのは実装の試みであって、人間が下した採用の判断ではない）、提案本文の
+   「リスク・見送る理由になりうる点」に破棄の日時・理由・その時点の HEAD SHA を追記する。
+5. 自己検証が通ったら、改善内容を開発者に提示する。提案を実装した場合は、**その提案の
+   `status` を `accepted` → `done` に変更し、同じ PR に含める**（この遷移だけは guard の
+   違反にならない。実装を伴わない `done` 化は人間がレビューで却下する）。
+   **PR の作成は開発者の確認を得てから**行う（タイトル規約: `chore(ai-improve): <改善の要約>`）。
+   `require_human_review` が true の間は自動 merge しない（merge は常に人間が判断する）。
 
 ## 出力
 
-- 実施した改善の要約（目的 / 変更ファイル / リスク）。
+- 実施した改善の要約（目的 / 変更ファイル / リスク / 実装した提案の id）。
 - 自己検証の結果（`aro guard` の判定と、実行した quality gate の結果）。
-- 次にやるべき改善候補（実施はしない）。
+- 実装中に見つけた**新しい改善候補はここに書き残さない**。propose プロンプト
+  （`.ai/managed/prompts/propose.md`）で `.ai/local/proposals/` に提案ファイルとして書き出す
+  （出力に書かれただけの候補は消える。提案ファイルは残り、人間の採否と次の実行の入力になる）。
 
 スコープを広げすぎないこと。1 PR = 1 つの明確な改善に保つ。

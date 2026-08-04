@@ -43,7 +43,10 @@ CI への書き込み権限の追加は一切不要。
    ```
 
 2. **改善の実施**: AI が `.ai/project.yaml` と適用 policy（`project.risk_level` に対応する
-   `.ai/managed/policies/*.yaml`）を読み、小さく安全な改善を 1 つ実施する。
+   `.ai/managed/policies/*.yaml`）を読み、改善を 1 つ実施する。改善対象は
+   `.ai/local/proposals/**` の **`status: accepted` の提案から 1 件選ぶのが既定**
+   （accepted が無い場合のみ、小さく安全な改善を自分で選ぶ）。提案の作成・採否の記録は
+   [`proposal-loop.md`](./proposal-loop.md) を参照。
 
 3. **自己検証**: AI（または開発者）がローカルで次の両方を通す。
 
@@ -60,7 +63,9 @@ CI への書き込み権限の追加は一切不要。
 
 4. **PR 作成**: 開発者が変更内容を確認したうえで PR を作成する（開発者自身の GitHub 権限を使う。
    CI 用の書き込み権限は増えない）。タイトル規約: **`chore(ai-improve): <改善の要約>`**。
-   PR 本文には improve.md の出力（改善の目的 / 変更ファイル / 自己検証の結果 / 次の改善候補）を含める。
+   PR 本文には improve.md の出力（改善の目的 / 変更ファイル / 自己検証の結果 / 実装した提案の id）を
+   含める。実装中に見つけた新しい改善候補は PR 本文ではなく、propose プロンプトで
+   `.ai/local/proposals/` に提案ファイルとして書き出す（[`proposal-loop.md`](./proposal-loop.md) 参照）。
 
 5. **CI の最終検証**: PR を開くと中央配布の workflow が `aro guard` を再実行する
    （ローカルの自己検証は自己申告にすぎないため、CI 側で必ず再検証する。[guard.md](./guard.md) 参照）。
@@ -75,6 +80,13 @@ CI への書き込み権限の追加は一切不要。
   検証ルールは merge-base 側から読まれるため、PR 内で設定を緩めても迂回できない。
 - **人間の関与が前提**: 起動・PR 作成・merge のすべてに開発者の判断が挟まる。CI cron のような
   無人実行はしない（改善の質が低い場合に無意味な PR が量産されるリスクも、人間が起動する分だけ低い）。
+
+## Proposal Loop との関係
+
+この文書のループは「改善を 1 件**実施する**」ためのもの。改善候補の**提案**と人間による
+**採否の記録**は [`proposal-loop.md`](./proposal-loop.md) が担い、そこで `accepted` になった提案が
+このループの既定の入力になる（improve.md 手順 1）。実装が完了した提案は同じ PR で `done` に
+閉じる。提案の採否そのものを AI が変更することは guard（`proposal_decision`）が防ぐ。
 
 ## Repo Knowledge Loop との関係
 

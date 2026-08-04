@@ -29,6 +29,14 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
   default branch への push では proposals check のみを実行して、並行 PR の merge で混入した
   proposal id の重複を merge 後の状態で決定的に検出する。
 
+### Changed
+
+- Proposal Loop（Stage 2）: `improve.md` の改善対象を「`status: accepted` の提案から 1 件選ぶ」
+  ことを既定に改訂（accepted が無い場合のみ自選。stale な accepted は選ばず人間に再確認を促す）。
+  実装完了時は同じ PR で提案を `done` に閉じ、破棄時は `accepted` のまま本文へ記録を追記する。
+  出力の「次にやるべき改善候補」は propose プロンプトで提案ファイルへ書き出す案内に置き換え
+  （distribution version 0.1.8）。運用手順書 `docs/proposal-loop.md` を追加。
+
 ### Fixed
 
 - knowledge / proposal の source path 検証が失敗したとき、本来の検証メッセージが
