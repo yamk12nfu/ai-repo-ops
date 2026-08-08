@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../../managed/schemas/knowledge.schema.json
+schema_version: 1
+entries:
+  - id: operating-model
+    document: operating-model.md
+    verified_at_commit: de5e9992291d9b144bd8ebb0411dbcebd9e566e4
+    sources:
+      - path: README.md
