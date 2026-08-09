@@ -2,7 +2,9 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: propose-prompt-guard-command-drift
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: 583edf848e5f76bb4b56eb8fd66e6e10ec0ebc7b
 sources:
   # 注: 対象そのものは distribution/base/files/.ai/managed/prompts/propose.md（20 行目）だが、
@@ -10,9 +12,6 @@ sources:
   # source には指定できない。distribution の変更を伴うため manifest を stale 検出の代理にする。
   - path: "packages/aro-cli/src/commands/guard.ts"
   - path: "distribution/base/manifest.yaml"
-decision:
-  by: ""
-  reason: ""
 ---
 
 ## 課題

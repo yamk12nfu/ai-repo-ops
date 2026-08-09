@@ -1,7 +1,9 @@
 ---
 schema_version: 1
 id: knowledge-check-guard-ordering
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: 8373788318e4535cb61c0ec0f1d274807af64e4a
 sources:
   - path: "docs/repo-knowledge-loop.md"

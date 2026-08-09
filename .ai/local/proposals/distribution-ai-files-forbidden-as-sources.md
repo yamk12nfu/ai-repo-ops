@@ -1,7 +1,9 @@
 ---
 schema_version: 1
 id: distribution-ai-files-forbidden-as-sources
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: de5e9992291d9b144bd8ebb0411dbcebd9e566e4
 sources:
   - path: "packages/aro-cli/src/core/knowledge-check.ts"
