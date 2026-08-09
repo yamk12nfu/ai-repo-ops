@@ -1,7 +1,9 @@
 ---
 schema_version: 1
 id: workflow-seed-create-only-manual-followup
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: bbb068ee0f453e519d8d6754f59bec6012f6999f
 sources:
   - path: "distribution/base/manifest.yaml"

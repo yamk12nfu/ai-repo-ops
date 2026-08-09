@@ -2,14 +2,13 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: readme-proposal-loop-missing
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: 583edf848e5f76bb4b56eb8fd66e6e10ec0ebc7b
 sources:
   - path: "README.md"
   - path: "docs/proposal-loop.md"
-decision:
-  by: ""
-  reason: ""
 ---
 
 ## 課題
