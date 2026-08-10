@@ -4,7 +4,7 @@ id: knowledge-check-guard-ordering
 status: accepted
 decision:
   by: yamk12nfu
-proposed_at_commit: 8373788318e4535cb61c0ec0f1d274807af64e4a
+proposed_at_commit: dacda46b96c2dcdaef51d99528e238b2dde9d2a9
 sources:
   - path: "docs/repo-knowledge-loop.md"
   - path: "README.md"
