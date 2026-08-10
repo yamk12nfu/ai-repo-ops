@@ -35,6 +35,7 @@ ai:
     # schema の managed copy は schema:sync 生成物なので authoritative 側と同時に変える
     - "distribution/**"
     - "CHANGELOG.md"
+    - "README.md"
     - ".ai/local/knowledge/**"
     - ".ai/local/proposals/**"
   forbidden_paths:
