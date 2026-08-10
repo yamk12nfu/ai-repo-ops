@@ -5,7 +5,7 @@ id: ab-proposals-two-track-decision
 status: accepted
 decision:
   by: yamk12nfu
-proposed_at_commit: a9b07f368eec404977ec1664d4c50a08661d2071
+proposed_at_commit: 05ab36441be28ca2d75133450c714580093fdfbf
 sources:
   # 注: 変更対象の正本は distribution/base/files/.ai/managed/prompts/propose.md だが、
   # source path の組み込み禁止パターン `**/.ai/**` が distribution 配下のコピーにも当たるため
