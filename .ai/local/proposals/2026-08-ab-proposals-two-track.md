@@ -2,7 +2,9 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: ab-proposals-two-track-decision
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: a9b07f368eec404977ec1664d4c50a08661d2071
 sources:
   # 注: 変更対象の正本は distribution/base/files/.ai/managed/prompts/propose.md だが、

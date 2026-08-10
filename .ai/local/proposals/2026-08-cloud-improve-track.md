@@ -2,7 +2,9 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: cloud-agent-improve-track
-status: open
+status: accepted
+decision:
+  by: yamk12nfu
 proposed_at_commit: a9b07f368eec404977ec1664d4c50a08661d2071
 sources:
   - path: "docs/local-improve-loop.md"
