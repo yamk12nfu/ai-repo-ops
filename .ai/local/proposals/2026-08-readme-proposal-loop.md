@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: readme-proposal-loop-missing
-status: accepted
+status: done
 decision:
   by: yamk12nfu
 proposed_at_commit: 583edf848e5f76bb4b56eb8fd66e6e10ec0ebc7b

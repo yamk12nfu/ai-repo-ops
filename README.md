@@ -2,7 +2,7 @@
 
 AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。
 
-> ステータス: **MVP 完了**（Phase 0〜7）+ `aro guard` + Repo Knowledge Loop。`aro init` / `aro diff` / `aro sync` / `aro doctor` / `aro guard` / `aro knowledge` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。リリース手順は [`RELEASE.md`](./RELEASE.md)、変更履歴は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
+> ステータス: **MVP 完了**（Phase 0〜7）+ `aro guard` + Repo Knowledge Loop + Proposal Loop。`aro init` / `aro diff` / `aro sync` / `aro doctor` / `aro guard` / `aro knowledge` / `aro proposals check` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。リリース手順は [`RELEASE.md`](./RELEASE.md)、変更履歴は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
 
 AI 実行の方針は「**AI はローカル、CI は決定的検証**」。CI（配布 workflow）に従量課金 API キーの AI を組み込む方向は採らず、PR レビューは既存サービス（CodeRabbit 等）に任せる。v0.1.1 の `ai-review` workflow にあった claude-code-action ベースの AI レビューは廃止し、現在のエンジンは `aro guard` と `aro knowledge check`（AI 不要の機械検証）へ差し替え済み。旧 `anthropic_api_key` 入力は互換性のため受け取り口だけ残しているが、現行エンジンは使用せず登録も不要である（経緯は [`docs/plans/02-ai-review-commenter.md`](./docs/plans/02-ai-review-commenter.md) 冒頭の注記を参照）。コード改善と repo 固有knowledgeの更新は開発者が手元の Claude Code / Codex で回す（[`docs/local-improve-loop.md`](./docs/local-improve-loop.md)、[`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md)）。`ai-improve` workflow は計画 03 Stage 2-2 で**配布物から除去済み**（`ai-improve.reusable.yml` は既存 repo の参照を壊さない no-op stub のみ）。本ツールが担うのは AI 運用基盤の**配布・更新・診断・強制・根拠付きknowledge検証**である。
 
@@ -15,6 +15,7 @@ AI 実行の方針は「**AI はローカル、CI は決定的検証**」。CI�
 - [`docs/guard.md`](./docs/guard.md) — `aro guard` の検証項目・merge-base 設計（自己改変防止）・CI での利用
 - [`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md) — repo固有knowledgeの形式・鮮度・安全境界・導入手順
 - [`docs/local-improve-loop.md`](./docs/local-improve-loop.md) — ローカル改善ループの運用手順（起動・自己検証・PR 規約）
+- [`docs/proposal-loop.md`](./docs/proposal-loop.md) — 提案・採否・実装を分離して回す Proposal Loop の運用手順書
 - [`docs/ai-review.md`](./docs/ai-review.md) — v0.1.1 時点の AI レビュー実装記録（方向転換により非推奨。有効化はしない）
 - [`docs/existing-tools.md`](./docs/existing-tools.md) — Copier / Cruft との関係、自作する理由、再評価ポイント
 - [`docs/plans/`](./docs/plans/) — Post-MVP 計画書（AI 実行本体・fleet 展開など）
@@ -75,6 +76,7 @@ aro doctor --repo /path/to/your-repo   # 対象repoの状態をPASS/WARN/FAILで
 aro guard --repo /path/to/your-repo --base main   # base..HEAD の diff を policies で機械検証（読み取り専用）
 aro knowledge init --repo /path/to/your-repo --base origin/main  # merge済み設定を基準にknowledge領域を初期化
 aro knowledge check --repo /path/to/your-repo     # 根拠・provenance・鮮度を検証（読み取り専用）
+aro proposals check --repo /path/to/your-repo     # 提案の形式・採否記録・根拠の鮮度を検証（読み取り専用）
 ```
 
 ### `aro knowledge`
@@ -94,6 +96,19 @@ knowledge は正本ではなく、各 entry が正確な source path と検証�
   自動PR / mergeは使わない。
 
 詳細は [`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md) を参照。
+
+### `aro proposals check`
+
+`.ai/local/proposals/` の提案ファイル（AI が提案し、人間が採否を決める Proposal Loop の記録）を
+機械的に検証する。AI・API キー不要・読み取り専用。
+
+- frontmatter の形式（`status` / `decision` / `sources`）と、`open` / `accepted` 提案の根拠の鮮度
+  （`proposed_at_commit` 以降に source が変わっていないか）を検証する。
+- stale は通常モードで WARN / exit 0、`--strict` では FAIL / exit 1 にする。CI は提案を変更する
+  PR を strict で検証する。
+- 終了コード: `0`=FAIL なし / `1`=FAIL あり / `3`=unexpected error。`--json` で機械可読出力。
+
+詳細は [`docs/proposal-loop.md`](./docs/proposal-loop.md) を参照。
 
 ### `aro guard`
 
