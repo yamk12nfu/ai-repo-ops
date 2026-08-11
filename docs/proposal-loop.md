@@ -100,6 +100,10 @@ improve.md は `status: accepted` の提案から 1 件選ぶことを既定と�
   （AI は順位付け・選抜をしない）
 - accepted が**すべて stale** のときは自選に進まず**停止**し、人間に再確認を求める
 
+実装が機械的な accepted は、ローカルの代わりに cloud Agent（人間が提案 id を 1 つ指定して
+タスク単位で起動する）へ委譲することもできる。対象の限定・権限の前提・「CI cron を採らない」
+判断との線引きは[ローカル改善ループの「cloud 実装トラック」](./local-improve-loop.md#cloud-実装トラック)を参照。
+
 実装が自己検証（guard + quality gates）を通ったら、提案の `status` を `accepted` → `done` に
 して同じ PR に含める（この遷移は guard の違反にならない）。実装を破棄した場合は `accepted` の
 まま据え置き、本文に破棄の記録を追記して、**記録だけの commit / PR として残す**
