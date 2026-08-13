@@ -5,8 +5,8 @@
 ## aro とは
 
 - AI 運用基盤の標準装備を、複数の GitHub リポジトリへ安全に配布・更新・検証するための中央管理ツール。
-- MVP 完了（Phase 0〜7）+ `aro guard` + Repo Knowledge Loop。`aro init` / `aro diff` / `aro sync` /
-  `aro doctor` / `aro guard` / `aro knowledge` はすべて実装済み。
+- MVP 完了（Phase 0〜7）+ `aro guard` + Repo Knowledge Loop + Proposal Loop。`aro init` / `aro diff` /
+  `aro sync` / `aro doctor` / `aro guard` / `aro knowledge` / `aro proposals check` はすべて実装済み。
 - 担当範囲は AI 運用基盤の「配布・更新・診断・強制・根拠付き knowledge 検証」。AI 実行本体は担わない。
 
 ## 大原則: AI はローカル、CI は決定的検証
@@ -35,6 +35,8 @@
   直後に限り `--base HEAD`。
 - `aro knowledge check` — 根拠・provenance・鮮度を検証（読み取り専用）。通常モードは stale を WARN、
   `--strict` は FAIL にする。
+- `aro proposals check` — Proposal Loop の提案について frontmatter・採否記録・根拠の鮮度を機械検証
+  （読み取り専用）。通常モードは stale を WARN、`--strict` は FAIL にする。
 
 ## 開発・配布の前提
 
@@ -50,5 +52,5 @@
 - 導入手順と `project.yaml` 調整: docs/onboarding.md
 - 配布の仕組み（manifest / lock / hash）: docs/distribution.md、docs/sync-strategy.md
 - 安全境界: docs/security.md、docs/guard.md
-- ループ運用: docs/local-improve-loop.md、docs/repo-knowledge-loop.md
+- ループ運用: docs/local-improve-loop.md、docs/repo-knowledge-loop.md、docs/proposal-loop.md
 - Post-MVP 計画: docs/plans/
