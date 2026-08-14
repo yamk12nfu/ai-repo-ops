@@ -32,7 +32,7 @@
 
 ## 前提
 
-- 対象 repo が `aro sync` で distribution 0.1.8 以降を導入済みであること
+- 対象 repo が `aro sync` で distribution 0.1.9 以降を導入済みであること
   （`.ai/managed/prompts/propose.md` と accepted 消化に対応した improve.md があり、
   `ai.allowed_paths` に `.ai/local/proposals/**` が含まれる。既存 repo は設定専用 PR を
   先に merge する）。
@@ -64,7 +64,11 @@ git switch -c docs/ai-propose-<topic>
 ```
 
 AI は既存の提案（特に `rejected` の理由）をすべて読んだ上で、`status: open` の新規ファイル
-だけを書く（コード変更ゼロ・3 件まで）。自己検証は `aro proposals check --repo . --strict` と
+だけを書く（コード変更ゼロ・3 件まで）。同じ目的に複数のアプローチがあり、AI が紙上で 1 案に
+絞れるだけの確度がない場合は、代替案を別ファイルで並べ、本文から互いの id を参照してよい。
+各提案には、人間が紙上で比較できる観点、または要実測なら何をどう測れば決まるかを「判定方法」
+として書く。AI は測り方までを提案し、測定・評価・選抜は行わない。自己検証は
+`aro proposals check --repo . --strict` と
 commit 後の `aro guard`。開発者が確認して PR を作成する（タイトル規約:
 `docs(proposals): <提案の要約>`）。`open` の新規追加は guard の違反にならないため、
 この PR は通常どおり merge できる。
@@ -84,6 +88,18 @@ decision:
 これは正常な動作である（採否の変更が人間の目を通らずに merge される経路を塞ぐため。
 `.ai/project.yaml` 変更の `project_config` と同じ運用）。PR の内容（誰が・どの提案を・
 どう判断したか）を確認したうえで、required check を明示的に override して merge する。
+
+判定には次の 2 トラックがある。
+
+- **紙上判定**: 人間が提案本文と「判定方法」の観点を比較する。代替案の勝者を `accepted`、
+  敗者を `rejected` とし、敗者の `decision.reason` に勝者の id と、どの観点で劣ったかを残す。
+- **実測判定**: 提案は `open` のまま、捨てる前提の spike を専用 worktree で作る。spike は
+  merge せず、人間が実行・測定する。測定条件と結果は比較した各提案の本文に追記し、その後に
+  人間が勝者を `accepted`、敗者を `rejected` にする。敗者の `decision.reason` には勝者の id と
+  測定結果に基づく比較理由を残す。実験中は status を変えず、使い終えた spike は破棄する。
+
+代替案の関係は、まず本文の相互参照で管理する。frontmatter の追加フィールドや機械検証は、
+運用実績を得てから別の提案として検討する。
 
 ### 3. 実装する（improve.md / PR②）
 
