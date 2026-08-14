@@ -3,7 +3,7 @@
 schema_version: 1
 id: 2026-08-accepted-allowed-paths-gate
 status: open
-proposed_at_commit: 05ab36441be28ca2d75133450c714580093fdfbf
+proposed_at_commit: fd23c4fa25ba814e9117990701afc57901359140
 sources:
   - path: "docs/guard.md"
   - path: "docs/proposal-loop.md"

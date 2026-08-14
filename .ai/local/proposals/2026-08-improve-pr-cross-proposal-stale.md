@@ -3,7 +3,7 @@
 schema_version: 1
 id: 2026-08-improve-pr-cross-proposal-stale
 status: open
-proposed_at_commit: 05ab36441be28ca2d75133450c714580093fdfbf
+proposed_at_commit: fd23c4fa25ba814e9117990701afc57901359140
 sources:
   - path: "packages/aro-cli/src/core/proposals-check.ts"
   - path: "docs/proposal-loop.md"
