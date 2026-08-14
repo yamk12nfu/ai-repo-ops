@@ -2,7 +2,9 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: 2026-08-onboarding-stacked-pr-retarget
-status: open
+status: accepted
+decision:
+  by: "yamk12nfu"
 proposed_at_commit: 86ef5911409da8c47fdd28113d892f8a07595de3
 sources:
   - path: "docs/onboarding.md"

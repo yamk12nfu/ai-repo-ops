@@ -2,13 +2,13 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: existing-tools-agent-plugins-standard
-status: open
+status: rejected
 proposed_at_commit: 2a834f25eec065acb4f67fbcc736a25707981647
 sources:
   - path: "docs/existing-tools.md"
 decision:
-  by: ""
-  reason: ""
+  by: "yamk12nfu"
+  reason: "exisiting-toolは作る前の話で現存している以上対比する必要がないため"
 ---
 
 ## 課題
