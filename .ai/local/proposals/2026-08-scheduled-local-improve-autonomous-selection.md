@@ -2,14 +2,14 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: scheduled-local-improve-autonomous-selection
-status: open
+status: accepted
 proposed_at_commit: 8f106b0039a2e0cfe318f8fd35916b22db0c84a3
 sources:
   - path: "docs/local-improve-loop.md"
   - path: "docs/proposal-loop.md"
 decision:
-  by: ""
-  reason: ""
+  by: "fooya"
+  reason: "accepted間の優先順位をHermes監督者へ委任し、Codex実装とClaude Opus 5の敵対レビューを経てDraft PRまで自動化する方針を承認。mergeと本番deployは引き続き人間が判断する。"
 ---
 
 ## 課題
