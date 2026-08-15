@@ -5,7 +5,7 @@ id: proposal-filename-convention-unenforced
 status: accepted
 decision:
   by: yamk12nfu
-proposed_at_commit: 05ab36441be28ca2d75133450c714580093fdfbf
+proposed_at_commit: fd23c4fa25ba814e9117990701afc57901359140
 sources:
   # 注: 規約の正本は distribution/base/files/.ai/managed/prompts/propose.md（37 行目）だが、
   # source path の組み込み禁止パターン `**/.ai/**` が distribution 配下のコピーにも当たるため

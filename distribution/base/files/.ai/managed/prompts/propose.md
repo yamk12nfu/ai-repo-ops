@@ -29,6 +29,9 @@
    `decision` は決して変更しない（採否の遷移は人間のみが行う。違反は `aro guard` の
    `proposal_decision` として required check を落とす）。
 3. 1 提案 = 1 ファイル。1 回の実行で書く提案は **3 件まで**とし、`ai.max_changed_files` に収める。
+   同じ目的に複数の実装アプローチがあり、AI が紙上で 1 案に絞れるだけの確度がない場合は、
+   代替案を別々の `open` 提案として並べてよい。この場合も合計 3 件までとし、各提案の本文から
+   代替案の id を相互参照する。どの案を採るかは選抜しない。
 4. 提案の大きさは「1 提案 = 1 PR で完結する」規模に留める（`ai.max_changed_files` に収まる
    変更見込みであること。「アーキテクチャを見直す」のような、採用しても実装できない提案は書かない）。
 
@@ -56,6 +59,9 @@ decision:
 ## 提案
 （何をするか。1 提案 = 1 つの明確な改善）
 
+## 判定方法
+（紙上判定: 人間が比較する観点、または要実測: 何をどう測れば決まるか。測定・選抜は人間が行う）
+
 ## 想定する変更範囲
 （触るファイルの見込み。`ai.max_changed_files` に収まるか）
 
@@ -72,7 +78,9 @@ decision:
    作業していること）を確認する。作業は専用 branch（例: `git switch -c docs/ai-propose-<topic>`）で行う。
 2. `.ai/local/proposals/**` の既存提案をすべて読む（`open` の重複回避・`rejected` の理由の学習）。
 3. 入力源（guard / doctor / lint / TODO / コードの観察）から提案候補を挙げ、3 件までに絞る。
-4. 各提案を上記の形式で新規ファイルとして書く。`proposed_at_commit` には現在の HEAD
+   同一目的の代替案を並べる場合は、各案を別ファイルにし、本文で互いの id を参照する。
+4. 各提案を上記の形式で新規ファイルとして書き、紙上判定か要実測かと、その判定方法を明記する。
+   AI は測り方の提案までとし、測定結果に基づく評価・選抜は行わない。`proposed_at_commit` には現在の HEAD
    （`git rev-parse HEAD` の完全な lowercase SHA）を記録する。
 5. **自己検証**: `aro proposals check --repo . --strict` が通ることを確認する。
 6. 変更を commit し、`git fetch origin <default branch>` の後に

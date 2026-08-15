@@ -11,6 +11,13 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Changed
+
+- Proposal Loop の採否を紙上判定と実測判定の 2 トラックに整理。確度が低いテーマでは同一目的の
+  代替案を別々の `open` 提案として相互参照し、判定方法を記録できるようにした。要実測の案は
+  `open` のまま非マージの worktree spike で人間が測定し、勝者を `accepted`、敗者を
+  `rejected` として比較理由を残す（distribution version 0.1.9）。
+
 ## [0.4.0] - 2026-08-05
 
 ### Added

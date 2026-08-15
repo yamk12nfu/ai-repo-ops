@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: ab-proposals-two-track-decision
-status: accepted
+status: done
 decision:
   by: yamk12nfu
 proposed_at_commit: 05ab36441be28ca2d75133450c714580093fdfbf
