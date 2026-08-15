@@ -11,8 +11,20 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Added
+
+- 明示 opt-in の scheduled local improve track を追加。開発者の管理端末上で Hermes supervisor が
+  allowlist 内 repo の fresh `accepted` を順位付けし、1 run 1 repo / 1 proposal とレビュー待ち
+  backpressure を守って Codex に限定実装を委任できる。Codex 実装後は read-only の
+  Claude Opus 5 敵対レビューを gate とし、最大 2 回の修正 / 再レビュー、commit 後 guard、
+  strict proposal check、required quality gates を通した Draft PR までに限定する。CI AI cron、
+  auto-merge、本番 deploy は引き続き禁止し、merge は人間が判断する（distribution version 0.1.10）。
+
 ### Changed
 
+- 無人実行を一律禁止する従来の包括的な保証を、repo 単位で明示 opt-in した scheduled local mode に
+  限って無人起動を許可する形へ限定的に変更。interactive local / cloud は引き続き人間が起動し、
+  すべての mode で merge は人間のみが行う（distribution version 0.1.10）。
 - Proposal Loop の採否を紙上判定と実測判定の 2 トラックに整理。確度が低いテーマでは同一目的の
   代替案を別々の `open` 提案として相互参照し、判定方法を記録できるようにした。要実測の案は
   `open` のまま非マージの worktree spike で人間が測定し、勝者を `accepted`、敗者を

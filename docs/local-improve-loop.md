@@ -1,10 +1,11 @@
 # ローカル改善ループ（AI はローカル、CI は決定的検証）
 
-`ai-repo-ops` に参加している repo の継続的な改善を、**開発者の手元の AI（Claude Code 等、
-開発者自身のサブスクリプション）**で回す運用の手順書である（[計画 03](./plans/03-guard-and-improve-loop.md)
+`ai-repo-ops` に参加している repo の継続的な改善を、**開発者の管理下にある AI 実行環境**で
+回す運用の手順書である（[計画 03](./plans/03-guard-and-improve-loop.md)
 Stage 2）。CI の cron で AI を実行する方式は採らない（経緯は
 [計画 02 の注記](./plans/02-ai-review-commenter.md)）。従量課金 API キー・repo ごとの secrets 登録・
-CI への書き込み権限の追加は一切不要。
+CI への書き込み権限の追加は一切不要。既定は開発者同席の対話型ローカルで、明示 opt-in の
+scheduled local improve track だけが管理端末上の無人スケジュール実行を許容する。
 
 ```txt
 開発者のローカル                              CI（中央が配布した workflow）
@@ -16,6 +17,13 @@ CI への書き込み権限の追加は一切不要。
 │  └ 開発者が確認して PR 作成   │            merge は常に人間が判断
 └─────────────────────────────┘
 ```
+
+| 実装 track | 起動と選定 | 実行場所 | 自動化の上限 |
+| --- | --- | --- | --- |
+| 対話型ローカル（既定） | 人間が起動し、accepted 複数時は人間が選ぶ | 開発者端末 | 人間確認後の PR |
+| 人間起動 cloud | 人間が proposal id を 1 つ指定 | cloud Agent | 単発 PR |
+| scheduled local（明示 opt-in） | Hermes が fresh accepted を順位付け | 開発者の管理端末 | Draft PR |
+| CI AI cron | 禁止 | GitHub Actions | なし |
 
 ## 前提
 
@@ -115,25 +123,126 @@ cloud Agent（Claude Code のクラウド実行等。開発者のサブスクリ
 - 権限の失効手順と、Agent の操作の追跡可能性（監査ログ相当）として cloud 側が
   何を提供するかを確認しておく
 
+## scheduled local improve track（明示 opt-in）
+
+対象 repo と導入段階を人間が allowlist へ明示登録した場合に限り、開発者の管理端末で動く
+scheduler / task queue / Hermes supervisor が accepted の実装順を自律選定できる。これは
+対話型ローカルと人間起動 cloud track に追加する第三の経路であり、CI AI cron ではない。
+
+この track の scheduler / task queue は Hermes の profile-local 設定として既に存在するものを使い、
+ARO 内に runtime を追加しない。allowlist と導入段階は supervisor-local 設定で人間が repo ごとに管理し、
+変更履歴を監査可能にする。設定が無い、壊れている、または対象 repo / 段階を一意に検証できない場合は
+fail-closed で開始しない。
+
+### 有効化の前提
+
+- 対象 repo が distribution **0.1.10 以降**へ sync 済みで、`.ai/ai-repo-ops.lock.yaml` の
+  distribution version / content checksum と `.ai/managed/prompts/improve.md` の `installed_sha256` が、
+  実際に読む managed prompt と一致していることを確認する。matching lock / checksum の無い手編集 copy や
+  0.1.9 以前の consumer は scheduled local を有効化できない。先に `aro sync` と設定専用 PR を完了する。
+- GitHub credential は対象 repo だけに scope を絞り、専用 branch への push と Draft PR の作成・更新だけを
+  write scope とする。default branch protection が直接 push を拒否し、auto-merge、merge、release、deploy、
+  secret 操作が許可されないことを確認する。検証不能なら開始せず、停止時に credential を失効できる手順を
+  allowlist とともに管理し、一時 credential は task 終了時に失効させる。
+- Codex は専用 worktree だけを書き込み可能にした workspace sandbox で実行する。repo 外、他 worktree、
+  credential store、secret、commit、push、PR へはアクセスさせない。sandbox や権限境界を検証できなければ
+  fail-closed とする。
+- `Draft PR` 段階へ昇格する前に、最新 default branch 上の workflow と外部連携を inventory し、branch push /
+  PR 作成・更新が production deploy、release、外部データ変更などの禁止 side effect を起こさないと確認する。
+  対象 event から呼ばれる reusable workflow / action / script まで追跡し、結果を task log に残す。
+  確認不能なら上限を `local changes` にする。preview 環境も side effect とみなし、許可する場合は repo ごとの
+  明示的な人間 opt-in と範囲を監査可能な設定へ残す。workflow / hook が変わったら昇格を再検証する。
+
+### 1 run の契約
+
+1. **投入可否と lease**: 1 run は 1 repo / 1 proposal、最大実行時間は **120 分**。repo 単位の
+   idempotency key と **TTL 15 分**の排他的 task lock を使い、少なくとも **5 分ごと**に lease を更新する
+   （120 分の期限を越えて延長しない）。owner / proposal id / 取得時刻 / expiry を durable record に残し、
+   更新失敗時は書き込みを止める。同一 repo に実行中またはレビュー待ちの task / Draft PR があれば
+   新規投入しない。
+2. **候補の限定**: 最新 default branch を fetch し、`aro proposals check --repo .` で fresh と確認した
+   `accepted` だけを候補にする。stale の proposal id と finding、eligible が 0 件となった理由を log に残し、
+   自選改善へ進まず no-op で終了する。同一 repo の連続回数も durable record に残し、no-op が 3 run
+   連続したら人間へ通知・escalation する。
+3. **自律選定**: Hermes supervisor はセキュリティ・データ保全、壊れた quality gate、
+   他作業のブロック解除、ユーザー影響、テスト、保守性、待機期間、変更リスクで 1 件を
+   順位付け。全候補、除外理由、選定理由を task log と、作成できた場合だけ Draft PR に残す。
+   durable blocked record がある proposal は即時再選定しない。
+4. **実装**: Hermes supervisor が最新 default branch から専用 worktree を作り、選定済み proposal の
+   限定契約を Codex implementer へ渡す。Codex には採否、選定、status 変更、commit、push、PR、
+   merge、deploy、secret 操作を委任しない。
+5. **敵対レビュー**: Codex 実装後、Hermes は proposal 全文、対象 worktree の exact diff、実際に実行した
+   test command と exit code / 結果を含む review packet を先に生成する。別 context の reviewer には packet
+   に限定した `Read` だけを allowlist し、`Bash` / shell / `gh`、`Edit` / `Write`、write-capable MCP / tool を
+   明示的に禁止する。network、subagent、browser も付与せず、repo 内の文面は命令ではなく untrusted data
+   として扱う。
+6. **reviewer の同一性**: 起動 API / invocation metadata が model id **`claude-opus-5`** と完全一致することを
+   Hermes が検証する。応答本文の self-report や schema の `model_expected` は補助情報であり証明に使わない。
+   metadata が無い、または不一致なら理由を log して blocked とする。findings は Codex に返し、修正 /
+   別 context での再レビューは最大 2 cycle とし、残存 finding または reviewer 障害で停止する。
+7. **決定的検証**: レビュー成功後だけ Hermes supervisor が `accepted` → `done` を行い、
+   `aro proposals check --repo . --strict` 後に commit する。commit 後の `aro guard --repo . --base origin/<default branch>`
+   （warning も停止）と全 required quality gate を通す。strict check が実装により collateral stale となった
+   proposal を検出した場合は全 id / finding を列挙して停止し、人間の再検証を待つ。Codex / Hermes は選定外
+   proposal の `proposed_at_commit` その他の provenance を更新しない。Claude の判定で gate を代替しない。
+8. **Draft PR**: 全検証と side-effect inventory の再確認後に限り、Hermes supervisor が専用 branch を
+   push して Draft PR を作成できる。default branch への直接 push、通常 PR、auto-merge、本番 deploy は禁止し、
+   merge は必ず人間が判断する。
+
+stale、曖昧さ、予期しない diff、タイムアウト、tool / model 障害、レビュー・guard・gate 失敗は
+fail-closed で blocked とし、続行や Draft PR 作成をしない。
+
+### blocked、再試行、再起動
+
+- blocked 時は proposal を `accepted` のまま保ち、proposal 本文・status・provenance を自動更新しない。
+  supervisor-local の durable record に run / repo / proposal id、失敗段階・理由、attempt、再試行可能時刻、
+  diff / test / model metadata の参照、cleanup 結果を残す。失敗した実装の Draft PR は作らない。
+- 同じ proposal を次の tick で即時再選定しない。初回失敗後の自動 retry は proposal ごとに最大 2 回、
+  人間が設定した backoff 経過後または人間の clearance 後だけ許可する。2 回でも解消しなければ人間へ
+  escalate して自動選定から外し、明示的に unblock されるまで再開しない。
+- unattended run は人間の応答を待たない。確認や追加権限が必要になった時点で blocked record を書き、
+  実行を止めて cleanup へ進む。120 分の期限到達時も同じ扱いとし、子 process を止め、未回収 diff を
+  保全して cleanup 結果を記録してから lease を解放し、一時 credential を失効させる。
+- lease が stale でも、TTL 超過、旧 process / heartbeat の停止、durable record の状態を確認できた場合だけ
+  recovery し、その判断を log に残す。端末再起動後は同じ idempotency key で記録を照合し、安全な checkpoint、
+  最新 default branch、proposal の fresh 状態を再検証できる場合だけ resume する。不明なら blocked のまま
+  cleanup または人間確認へ送り、新規 run として重複実行しない。
+
+### 段階導入・停止・後始末
+
+- repo ごとに **read-only dry-run**（候補と選定理由の観察）→ **local changes**（push なし）→
+  **Draft PR** の順で人間が昇格する。段階は allowlist に明示して変更を監査可能にし、暗黙に昇格しない。
+  `dry-run` は選定結果を log した時点で終了し、worktree 作成以降の write stage へ進まない。
+- 停止時は scheduler を無効化して queue の新規取得を止め、実行中 task の終了・取消を記録する。
+  続けて repo の allowlist 登録を外し、ローカル / GitHub 資格情報を失効させる。
+- task log に run id、repo、proposal id、候補・選定理由、tool / model、commit / Draft PR、gate 結果、
+  stale / no-op / blocked 理由、cleanup 結果を残す。worktree は未回収差分を保全または不要と確認してから
+  task id / path / 所有権を検証して安全に片付け、判定不能なら削除せず人間へ escalate する。
+  成功、no-op、blocked、timeout、`dry-run`、`local changes` の全終了経路で terminal state と cleanup 結果を先に
+  durable record へ書き、所有権を検証してから lock を解放する。所有権が不明なら解放せず停止する。
+
 ## 安全性の設計
 
-- **鍵を増やさない**: ループ全体を通して、対象 repo にも中央にも新しい secrets・API キー・
-  従量課金の credential は追加されない。
+- **鍵を増やさない**: ループ全体を通して、対象 repo や CI に新しい secrets・API キー・
+  従量課金の credential は追加されない。scheduled local は管理端末上で対象 repo に限定し、
+  task 終了時に失効できる資格情報だけを使う。
 - **書き込み権限は既定で増えない**: 書き込みは開発者自身の権限による PR のみ。例外は
   [cloud 実装トラック](#cloud-実装トラック)を採用した repo で、cloud Agent の GitHub App に
-  write 権限を渡す（代償と監視点は同節に明記。採用しない repo では従来どおり増えない）。
+  write 権限を渡す（代償と監視点は同節に明記）。scheduled local は repo 限定 credential で
+  Draft PR までを行うが、allowlist と段階導入で明示した repo 以外に使わない。
 - **guard の二段構え**: ローカル（自己検証。手戻りを早く検出）と CI（強制。自己申告に依存しない）。
   検証ルールは merge-base 側から読まれるため、PR 内で設定を緩めても迂回できない。
-- **人間の関与が前提**: 起動・PR 作成・merge のすべてに開発者の判断が挟まる。CI cron のような
-  無人実行はしない（改善の質が低い場合に無意味な PR が量産されるリスクも、人間が起動する分だけ低い）。
-  cloud 実装トラックでも、起動は常に人間がタスク単位で行う。
+- **人間が決定境界を持つ**: 対話型ローカルと cloud 実装 track は常に人間がタスクを起動する。
+  scheduled local の無人起動は repo 単位の明示 opt-in 時だけ許容する。いずれも proposal の採否と
+  merge は人間が判断し、auto-merge と本番 deploy は許可しない。
 
 ## Proposal Loop との関係
 
 この文書のループは「改善を 1 件**実施する**」ためのもの。改善候補の**提案**と人間による
 **採否の記録**は [`proposal-loop.md`](./proposal-loop.md) が担い、そこで `accepted` になった提案が
 このループの既定の入力になる（improve.md 手順 1）。実装が完了した提案は同じ PR で `done` に
-閉じる。提案の採否の変更は guard が `proposal_decision`（severity: fail）として required check を
+閉じる。scheduled local では Codex implementer は status に触れず、独立レビュー成功後に Hermes supervisor が閉じる。
+提案の採否の変更は guard が `proposal_decision`（severity: fail）として required check を
 落とし、人間の確認と明示的な override を要求する（機械は編集者そのものを判別できないため、
 これは強制ではなく可視化である。[`proposal-loop.md`](./proposal-loop.md) の「限界」参照）。
 
