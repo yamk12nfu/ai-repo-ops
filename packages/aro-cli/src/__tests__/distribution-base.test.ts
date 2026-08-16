@@ -433,6 +433,10 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       expect(currentIndex).toBeGreaterThan(previousIndex);
       previousIndex = currentIndex;
     }
+    expect(order).toContain("collateral revalidation が成立しなければ provenance 更新 / push / PR を行わない");
+    expect(order).toContain("implementation commit 前の tentative な status 変更だけ");
+    expect(order).toContain("implementation commit 後は commit / status を書き戻さない");
+    expect(order).not.toContain("tentative な status 変更だけを `accepted` に戻し");
     expect(track).toContain("auto-merge / deploy / release / workflow / secret 変更は禁止");
   });
 

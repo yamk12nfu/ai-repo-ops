@@ -196,8 +196,11 @@ replacement でも diff と packet を新 SHA だけから作る。再び OID �
 15. `Draft PR`: expected base OID が `BASE_SHA` と一致することを確認して作成し、選定・検証 evidence を
     要約する。
 
-各段階の warning は exit 0 でも blocking。失敗時は push / PR を行わず、Hermes 自身の tentative な
-status 変更だけを `accepted` に戻し、原因、inventory、diff、review / gate 出力を保全する。
+各段階の warning は exit 0 でも blocking。collateral revalidation が成立しなければ provenance 更新 / push / PR を行わない。
+失敗が implementation commit 前なら、Hermes 自身の implementation commit 前の tentative な status 変更だけを
+未commitのまま `accepted` に戻す。implementation commit 後は commit / status を書き戻さない。local branch、
+inventory、diff、review / gate 出力を blocked evidence として保全し、push しないため remote default branch 上の
+proposal status は `accepted` のまま維持される。
 discarded-attempt の proposal 記録は既存の手順 4 に従う separate record PR とし、
 人間の確認なしに scheduled push しない。
 auto-merge / deploy / release / workflow / secret 変更は禁止する。credential は allowlist の対象 repo に限定し、
