@@ -7,6 +7,7 @@ proposed_at_commit: 8f106b0039a2e0cfe318f8fd35916b22db0c84a3
 sources:
   - path: "docs/local-improve-loop.md"
   - path: "docs/proposal-loop.md"
+  - path: "distribution/base/manifest.yaml"
 decision:
   by: "fooya"
   reason: "accepted間の優先順位をHermes監督者へ委任し、Codex実装とClaude Opus 5の敵対レビューを経てDraft PRまで自動化する方針を承認。mergeと本番deployは引き続き人間が判断する。"
@@ -34,25 +35,46 @@ scheduler / task queue / 監督 agent / Codex CLI を使う方式は、credentia
 
 1. **ローカル限定**: scheduler、task queue、監督 agent、実装 agent は開発者の管理端末で動かす。
    対象 repo や CI に新しい API key / secret を配布しない。GitHub Actions の AI cron は復活させない。
-2. **対象の限定**: 人間が allowlist へ明示登録した repo の、stale ではない `accepted` proposalだけを
-   対象にする。accepted がなければ自選改善へ進まず、何も実装しない。
-3. **自律選択**: eligible accepted が複数ある場合、監督 agent はセキュリティ・データ保全、壊れた
-   quality gate、他作業のブロック解除、ユーザー影響、テスト、保守性、待機期間、変更リスクを基準に
-   1件を選ぶ。候補、除外理由、選定理由をtask logとDraft PRへ残す。
+2. **対象とfreshnessの限定**: 人間がallowlistへ明示登録したrepoだけを対象にする。Hermesは
+   `aro proposals check --repo .` のexit codeだけでなくfindingsを読み、`source.stale` が1件でも付いた
+   `accepted` proposalをすべて除外する。eligibleなacceptedがなければ自選改善へ進まず、何も実装しない。
+   配布promptの変更はauthoritativeな `distribution/base/manifest.yaml` をsource proxyとして追跡し、
+   managed copyである `.ai/**` はsourceにしない。
+3. **決定的な自律選択**: eligible acceptedが複数ある場合、次を上から順に比較する辞書式優先順位とする:
+   セキュリティ・データ保全、壊れたquality gate、他作業のブロック解除、ユーザー影響、テスト、保守性、
+   待機期間、変更リスク。上位基準で差が付けば下位基準は選定を覆さず、全基準が同点ならschema検証済みの
+   normalized proposal ID昇順を最終stable tie-breakerにする。実装前に全候補、除外と理由、各候補の各基準の
+   評価、比較結果、tie-breaker使用有無をtask logへ記録し、Draft PRにも要約する。同一のeligible入力と
+   evidenceからは同じproposalを選ぶ。
 4. **1 run = 1 proposal**: 1回に1 repo・1 proposalだけを扱い、同一repoの並行 improveを禁止する。
    実行中またはレビュー待ちがあればschedulerは新規作業を投入しない。
-5. **監督者と作業者の分離**: 監督 agentが選定、最新default branchからの専用worktree、Codex等への
-   限定作業契約、進行監視、diffレビュー、独立検証を担当する。実装 agentには採否、選定、status変更、
-   commit、push、PR、merge、deploy、secret操作を委任しない。
-6. **既存レールを維持**: required quality gates、commit後の `aro guard`、proposal変更後の
-   `aro proposals check --strict` を実行する。自律実行ではguardのwarningも停止条件とする。
-7. **Draft PR境界**: 検証済み変更はDraft PRまで自動作成できるが、auto-mergeと本番deployは禁止する。
-   mergeは常に人間が判断する。想定外、曖昧、stale、検証失敗時は実装を続けずblockedとして報告する。
-8. **段階導入**: 最初は読み取り専用dry-runで選定理由だけを観察し、その後ローカル変更、最後にDraft PR
+5. **immutable base**: Hermesはremote default branchをfetchした直後に、その時点のexact full commitを
+   `BASE_SHA`として固定し、専用worktreeとbranchをそのSHAから作る。実装diff、Codex/Opusのreview packet、
+   `aro guard --base`、Draft PR作成時に期待するdefault branch revisionはすべて同じ `BASE_SHA` を使い、
+   baseを混在させない。guard前にもbaseをfetchする。push/PR直前には直ちに再fetchしてremote default
+   branchの現在OIDと `BASE_SHA` を比較する。異なれば停止し、新SHAへrebaseまたはworktree/branchを再作成
+   した後、Codex review、Opus review、strict proposal check、guard、全quality gateを再実行するか、
+   blockedのままにする。
+6. **役割の分離**: Hermes supervisorだけが選定、`BASE_SHA`/worktree作成、監視、独立diff検証、検証後の
+   `accepted` → `done`、commit、push、Draft PR、log、cleanupを所有する。Codexは専用workspace sandbox内の
+   実装とtestにだけ書き込め、選定、status、commit、push、PR、merge、deploy、secret/credentialを扱わない。
+   Claude Opus 5 reviewerは別contextでreview packetだけをread-onlyで読み、shell/write/network toolを持たない。
+   人間だけがproposalの採否・再検証、promotion/credential設定、merge、本番deployを決定する。
+7. **既存improve契約を継承**: scheduled trackでも `.ai/project.yaml` とrisk levelに対応するpolicyを適用し、
+   `ai.max_loops`、`ai.max_changed_files` とpolicy `change_limits.max_changed_files` の小さい方、policyの
+   `change_limits.max_added_lines`、`allowed_paths`、両方の`forbidden_paths`、`commands`、`quality_gates`を
+   緩和しない。`.ai/managed/**`、workflow、project configの変更は禁止する。baseをfetchしてからguardを実行し、
+   exit 0でもwarningがあれば停止する。proposalを変更した場合の `aro proposals check --repo . --strict` は
+   必須とする。
+8. **Draft PR境界**: 検証済み変更だけをDraft PRまで自動作成できる。credentialは対象repoかつ当該branchの
+   push/Draft PR作成だけにscopeし、merge、deploy、release、workflow/secret変更、他repoへのwriteを許可しない。
+   prompt上の禁止だけでなくGitHub App/token permissionsとbranch protection等の実権限で強制する。
+   想定外、曖昧、stale、検証失敗時は実装を続けずblockedとして報告し、auto-mergeは行わない。
+9. **段階導入**: 最初は読み取り専用dry-runで選定理由だけを観察し、その後ローカル変更、最後にDraft PR
    作成をrepo単位で有効化する。停止方法、実行履歴、worktree cleanup、権限失効手順も文書化する。
 
 このトラックは従来の対話型ローカルループと人間起動cloudトラックを置き換えず、明示opt-inの第三の
-実装経路として追加する。
+実装経路として追加する。このproposal PRは契約だけを定義し、runtime実装を含まない。
 
 ## 想定する変更範囲
 
