@@ -436,6 +436,18 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(track).toContain("auto-merge / deploy / release / workflow / secret 変更は禁止");
   });
 
+  it("scheduled local credentialをrepo scopeに限定しbranchとDraft PRの境界を分離する", async () => {
+    const prompt = await readFile(IMPROVE_PROMPT, "utf8");
+    const track = prompt.slice(prompt.indexOf("## Scheduled local improve track（明示 opt-in）"));
+
+    expect(track).toContain("credential は allowlist の対象 repo に限定");
+    expect(track).toContain("branch protection / ruleset");
+    expect(track).toContain("GitHub App の bypass");
+    expect(track).toContain("Draft PR は Hermes の運用制御と audit");
+    expect(track).toContain("credential scope の機械的制限ではない");
+    expect(track).not.toContain("当該 branch の push / Draft PR 作成だけに実権限で限定");
+  });
+
   it("運用docsが正本promptへリンクし自律選定をscheduled opt-inだけの例外にする", async () => {
     const [localLoop, proposalLoop] = await Promise.all([
       readFile(LOCAL_IMPROVE_LOOP_DOC, "utf8"),
@@ -446,10 +458,13 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(localLoop).toContain("runtime 実装はこの変更の対象外");
     expect(localLoop).toContain("distribution 0.1.10 以降");
     expect(localLoop).toContain("古い repo は `aro sync` を先に実行");
-    expect(localLoop).toContain("credential scope と branch protection");
-    expect(localLoop).toContain("branch / Draft PR 境界を機械的に制限");
+    expect(localLoop).toContain("credential scope は repo 単位");
+    expect(localLoop).toContain("default branch の branch protection pattern");
+    expect(localLoop).toContain("scheduled branch prefix の ruleset");
+    expect(localLoop).toContain("GitHub App の bypass 設定");
+    expect(localLoop).toContain("Draft PR は Hermes の運用制御と audit");
     expect(localLoop).toContain("local-only / exclusion は prompt の運用契約");
-    expect(localLoop).not.toContain("Draft PR 境界を正本 prompt で強制する");
+    expect(localLoop).not.toContain("branch / Draft PR 境界を機械的に制限");
     expect(proposalLoop).toContain("明示 opt-in の scheduled local improve track に限り");
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });

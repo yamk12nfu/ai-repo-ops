@@ -147,12 +147,14 @@ cloud Agent（Claude Code のクラウド実行等。開発者のサブスクリ
 - **鍵を増やさない**: ループ全体を通して、対象 repo にも中央にも新しい secrets・API キー・
   従量課金の credential は追加されない。
 - **書き込み権限は既定で増えない**: 対話型では開発者自身の権限による PR のみ。例外は cloud Agent の
-  GitHub App（代償と監視点は同節）と scheduled local の branch / Draft PR 限定 credential である。
+  GitHub App（代償と監視点は同節）と scheduled local の repo 単位 credential である。
   scheduled local でも CI や repo secret へ権限を追加しない。
 - **guard の二段構え**: ローカル（自己検証。手戻りを早く検出）と CI（強制。自己申告に依存しない）。
   検証ルールは merge-base 側から読まれるため、PR 内で設定を緩めても迂回できない。
 - **人間の関与が前提**: 対話型と cloud は起動・PR 作成を人間が判断し、全 track の merge は人間だけが
-  判断する。scheduled local では credential scope と branch protection が branch / Draft PR 境界を機械的に制限する。
+  判断する。scheduled local の credential scope は repo 単位である。stage promotion 前に default branch の branch protection pattern、
+  必要な scheduled branch prefix の ruleset、GitHub App の bypass 設定を確認する。Draft PR は Hermes の運用制御と audit
+  による境界であり、credential が機械的に強制する状態ではない。
   local-only / exclusion は prompt の運用契約と audit であり、機械的強制ではない。
 
 ## Proposal Loop との関係
