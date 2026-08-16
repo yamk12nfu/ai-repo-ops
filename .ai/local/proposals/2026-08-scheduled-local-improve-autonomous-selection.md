@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: scheduled-local-improve-autonomous-selection
-status: accepted
+status: done
 proposed_at_commit: 8f106b0039a2e0cfe318f8fd35916b22db0c84a3
 sources:
   - path: "docs/local-improve-loop.md"

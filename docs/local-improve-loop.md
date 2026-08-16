@@ -78,6 +78,33 @@ CI への書き込み権限の追加は一切不要。
    あわせて既存のレビューサービス（CodeRabbit 等）と人間がレビューし、**merge は常に人間が判断する**
    （`auto_merge` は封印されている）。
 
+## scheduled local improve track（明示 opt-in）
+
+この track は distribution 0.1.10 以降が前提であり、古い repo は `aro sync` を先に実行する。
+既定は上記の対話型ループである。開発者が repo 単位で明示 opt-in した場合に限り、開発者管理の
+ローカル端末上の scheduler / Hermes supervisor / Codex worker から、accepted の決定的選定と
+検証済み Draft PR 作成までを委譲できる。CI の AI cron、新しい repo secret、auto-merge、deploy は
+導入しない。
+
+完全な実行契約の正本は配布元の
+[`improve.md`](../distribution/base/files/.ai/managed/prompts/improve.md#scheduled-local-improve-track明示-opt-in)
+である。consumer repo の `.ai/managed/**` は `aro sync` が作る copy なので、直接編集しない。運用側では
+次だけを設定・監視する。
+
+- allowlist と repo 単位の排他を設け、**1 run = 1 repo = 1 proposal** とする。running または
+  review-waiting の間は次を投入せず、lock / lease / runtime / retry を有限にする。
+- remote default branch の完全 SHA を固定する。選定前 strict、実装、独立検証、review、guard、gates、
+  push / Draft PR が同じ base を使う。base drift 時の一度だけの clean replay を含む詳細順序は正本に従う。
+- dry-run では findings と would-select だけを記録し、repo を変更しない。write stage では warning /
+  failure / stale をすべて implementation 前の blocking condition とする。
+- Hermes は Git / GitHub 操作と監査を所有し、Codex は sandbox 内の実装・test だけ、fresh Opus reviewer は
+  prebuilt packet の read-only review だけを行う。採否、revalidation、stage promotion、credential、merge、
+  本番 deploy は人間が判断する。
+
+導入は repo ごとに **dry-run → local changes → Draft PR** と進める。停止 switch、append-only run log、
+evidence を残す worktree cleanup、token / GitHub App の revoke 手順を各 stage の有効化前に確認する。
+scheduler、queue、lease、credential 配布などの runtime 実装はこの変更の対象外である。
+
 ## cloud 実装トラック
 
 紙上判定で `accepted` になった提案のうち**実装が機械的なもの**に限り、手順 2〜3 の実行を
@@ -119,14 +146,16 @@ cloud Agent（Claude Code のクラウド実行等。開発者のサブスクリ
 
 - **鍵を増やさない**: ループ全体を通して、対象 repo にも中央にも新しい secrets・API キー・
   従量課金の credential は追加されない。
-- **書き込み権限は既定で増えない**: 書き込みは開発者自身の権限による PR のみ。例外は
-  [cloud 実装トラック](#cloud-実装トラック)を採用した repo で、cloud Agent の GitHub App に
-  write 権限を渡す（代償と監視点は同節に明記。採用しない repo では従来どおり増えない）。
+- **書き込み権限は既定で増えない**: 対話型では開発者自身の権限による PR のみ。例外は cloud Agent の
+  GitHub App（代償と監視点は同節）と scheduled local の repo 単位 credential である。
+  scheduled local でも CI や repo secret へ権限を追加しない。
 - **guard の二段構え**: ローカル（自己検証。手戻りを早く検出）と CI（強制。自己申告に依存しない）。
   検証ルールは merge-base 側から読まれるため、PR 内で設定を緩めても迂回できない。
-- **人間の関与が前提**: 起動・PR 作成・merge のすべてに開発者の判断が挟まる。CI cron のような
-  無人実行はしない（改善の質が低い場合に無意味な PR が量産されるリスクも、人間が起動する分だけ低い）。
-  cloud 実装トラックでも、起動は常に人間がタスク単位で行う。
+- **人間の関与が前提**: 対話型と cloud は起動・PR 作成を人間が判断し、全 track の merge は人間だけが
+  判断する。scheduled local の credential scope は repo 単位である。stage promotion 前に default branch の branch protection pattern、
+  必要な scheduled branch prefix の ruleset、GitHub App の bypass 設定を確認する。Draft PR は Hermes の運用制御と audit
+  による境界であり、credential が機械的に強制する状態ではない。
+  local-only / exclusion は prompt の運用契約と audit であり、機械的強制ではない。
 
 ## Proposal Loop との関係
 

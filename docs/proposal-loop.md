@@ -3,8 +3,10 @@
 `ai-repo-ops` に参加している repo で、改善の**提案**と**採否の判断**と**実装**を分離して回す
 運用の手順書である（[計画 06](./plans/06-proposal-loop.md)）。
 
-方針は一貫している: **採否を判断するのは常に人間**。AI は提案を作るところまでを担い、
-良し悪しの評価・順位付け・選抜は行わない。機械（`aro proposals check` / `aro guard`）が担うのは
+方針は一貫している: **採否を判断するのは常に人間**。AI は提案を作るところまでを担い、既定では
+良し悪しの評価・順位付け・選抜は行わない。明示 opt-in の scheduled local improve track に限り、
+採用済み proposal 間の実装順を Hermes に委任できるが、採否そのものは委任しない。機械
+（`aro proposals check` / `aro guard`）が担うのは
 「提案が消えないこと」「判断が記録されること」「根拠が腐ったら検出されること」「採否の変更が
 人間の目を必ず通ること」だけである。AI の実行はローカル、CI は決定的検証という
 [ローカル改善ループ](./local-improve-loop.md)の分担をそのまま引き継ぐ。
@@ -112,8 +114,9 @@ improve.md は `status: accepted` の提案から 1 件選ぶことを既定と�
 
 - **stale な accepted は選ばない**。復帰は人間の仕事: 根拠を現在の HEAD で再確認し、
   frontmatter の `proposed_at_commit` を更新する（`status` は変えないため guard は通る）
-- 実装可能な accepted が**複数**あるときは、AI は一覧を提示して**開発者が選ぶ**
-  （AI は順位付け・選抜をしない）
+- 実装可能な accepted が**複数**あるとき、対話型モードでは引き続き開発者が選ぶ。唯一の例外は
+  repo ごとに明示 opt-in した scheduled local track であり、選定・排他・検証の完全な契約は
+  [ローカル改善ループ](./local-improve-loop.md#scheduled-local-improve-track明示-opt-in)から正本 prompt を参照する
 - accepted が**すべて stale** のときは自選に進まず**停止**し、人間に再確認を求める
 
 実装が機械的な accepted は、ローカルの代わりに cloud Agent（人間が提案 id を 1 つ指定して

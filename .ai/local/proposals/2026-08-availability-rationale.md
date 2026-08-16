@@ -3,7 +3,7 @@
 schema_version: 1
 id: safety-design-availability-rationale
 status: open
-proposed_at_commit: 2a834f25eec065acb4f67fbcc736a25707981647
+proposed_at_commit: cf874635ba268ff03a58c9960c4834a3370e6f25
 sources:
   - path: "docs/local-improve-loop.md"
   - path: "docs/plans/02-ai-review-commenter.md"
