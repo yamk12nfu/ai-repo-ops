@@ -3,7 +3,7 @@
 schema_version: 1
 id: cloud-track-observation-items
 status: open
-proposed_at_commit: 2a834f25eec065acb4f67fbcc736a25707981647
+proposed_at_commit: 6bd4d2ede327e71f5e7fba1121eb63c17e16e412
 sources:
   - path: "docs/local-improve-loop.md"
 decision:

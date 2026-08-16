@@ -5,7 +5,7 @@ id: propose-prompt-guard-command-drift
 status: accepted
 decision:
   by: yamk12nfu
-proposed_at_commit: fd23c4fa25ba814e9117990701afc57901359140
+proposed_at_commit: 6bd4d2ede327e71f5e7fba1121eb63c17e16e412
 sources:
   # 注: 対象そのものは distribution/base/files/.ai/managed/prompts/propose.md（20 行目）だが、
   # source path の組み込み禁止パターン `**/.ai/**` が distribution 配下のコピーにも当たるため
@@ -34,8 +34,8 @@ sources:
 
 `aro guard --repo . --base origin/<default branch> --json`
 
-に修正する。distribution の変更なので `distribution/base/manifest.yaml` の version bump
-（0.1.8 → 0.1.9）と CHANGELOG への記載を同一 PR で行う。
+に修正する。distribution の変更なので `distribution/base/manifest.yaml` を実装時点の current
+version から次の配布 version へ bump し、CHANGELOG への記載を同一 PR で行う。
 
 ## 想定する変更範囲
 
