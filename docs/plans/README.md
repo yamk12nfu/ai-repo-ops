@@ -5,9 +5,12 @@ MVP（Phase 0〜7: `aro init` / `diff` / `sync` / `doctor`）完了後の実装�
 
 ## 一覧と現在地
 
-この表が計画レベルの状態の正本である。`active` は原則1件だけとし、stageの詳細とDoDは各計画書に置く。
+この表が **ARO 開発ロードマップ**の計画状態と実装工程の正本である。`active` は原則1件だけとし、
+工程の詳細とDoDは各計画書に置く。ここに示す `Implementation phase` は、consumer repo が
+`.ai/local/execution-plans/*.md` に所有する実行時の `current_stage` とは別の名前空間・別の状態であり、
+相互に同期または転記しない。
 
-| # | 計画 | Status | Current stage | できるようになること（要約） | 前提 |
+| # | 計画 | Roadmap status | Implementation phase | できるようになること（要約） | 前提 |
 |---|---|---|---|---|---|
 | 00 | [Schema evolution](./00-schema-evolution.md) | `proposed` | — | schema互換性と将来のupgrade境界を定義する | 実際のmajor変更が必要になった時 |
 | 01 | [リリース基盤（v1 タグ）](./01-release-v1.md) | `completed` | — | `aro init` した repo の workflow が実際に起動する | なし |
@@ -16,7 +19,7 @@ MVP（Phase 0〜7: `aro init` / `diff` / `sync` / `doctor`）完了後の実装�
 | 04 | [パッケージング](./04-packaging.md) | `completed` | — | 中央 repo 外から `aro` を実行し、pack smoke testで検証する | 01 |
 | 05 | [fleet 診断 + rollout](./05-fleet-and-rollout.md) | `proposed` | not-started | 全対象 repo の状態を一覧し、将来一括同期する | 04 / 参加repo増加 |
 | 06 | [Proposal Loop](./06-proposal-loop.md) | `completed` | — | 提案、人間の採否、freshness、実装待ちをrepoに残す | 03 |
-| 07 | [Execution Plan Protocol](./07-execution-plan-protocol.md) | `accepted` | protocol-foundation | repo が実行計画・現在stage・次操作・許可された副作用を所有する | 03 / 06 |
+| 07 | [Execution Plan Protocol](./07-execution-plan-protocol.md) | `active` | `stage-1-protocol-foundation` | repo が実行計画・現在stage・次操作・許可された副作用を所有する。Stage 1の採用済みProposal IDは`execution-plan-protocol-foundation` | 03 / 06 |
 
 ## 着手順の考え方
 

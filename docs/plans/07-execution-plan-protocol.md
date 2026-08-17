@@ -26,6 +26,10 @@ repo でも人間が承認した地点から安全に再開できる。
 
 GitHub Issue、Kanban、Discord は表示・通知・投入手段には使えるが、実行判断の正本にしない。
 
+`docs/plans/README.md` と本書の「Stage 1〜5」は **ARO開発ロードマップ**上の実装工程であり、
+consumer Execution Planの`current_stage`ではない。ロードマップの正本は`docs/plans/README.md`、
+各consumerの実行状態の正本は`.ai/local/execution-plans/*.md`とし、両者を同期または転記しない。
+
 ## 基本形式
 
 ```text
@@ -65,7 +69,37 @@ stages:
     status: pending
 ```
 
-`merge` は v1 では常に `false`。`active` plan は repo ごとに最大 1 件とする。
+`permissions.merge` は v1 では常に `false`。`active` plan は repo ごとに最大 1 件とする。
+
+## Execution Plan v1 の状態契約
+
+Plan statusは`proposed | active | blocked | completed | abandoned | superseded`、Stage statusは
+`pending | active | blocked | completed`とする。許可する遷移は次のとおり。
+
+| 対象 | 許可する遷移 | 備考 |
+|---|---|---|
+| Plan | `proposed -> active` | 人間の承認が必要 |
+| Plan | `active <-> blocked` | blocked中は実行不可 |
+| Plan | `active -> completed` | 全Stage完了後だけ |
+| Plan | `proposed | active | blocked -> abandoned | superseded` | 人間の判断が必要なterminal遷移 |
+| Stage | `pending -> active` | 直前Stageがcompletedの場合だけ。人間のpromotionが必要 |
+| Stage | `active <-> blocked` | blocked中は実行不可 |
+| Stage | `active -> completed` | DoDとevidenceが揃った場合だけ |
+
+追加のinvariant:
+
+- repo内の`active` Planは最大1件。複数なら自動選択せず`blocked`として返す。
+- `active` Planは`active` Stageをちょうど1件持ち、`current_stage`はそのStage IDと一致する。
+- `blocked` Planの`current_stage`は`blocked` Stageを指す。`next_action`は保持できるが実行不可。
+- terminal Plan（`completed | abandoned | superseded`）はactive/blocked Stage、`current_stage`、`next_action`を持たない。
+- 完了済みStageより前にpending Stageを残さず、Stage列を逆行させない。
+- `permissions.merge: true`は常にinvalid。その他の`permissions`拡大は人間のpromotionとして扱う。
+
+`next_action`がProposalを必要とする場合、そのactionが参照する`proposal_id`だけを実行可否判定の対象にする。
+将来Stageのopen Proposalまで一括して現在Stageのblockerにはしない。対象Proposalは存在し、`accepted`で、
+`proposed_at_commit`がHEADの祖先かつ全`sources[].path`がそのcommit以降未変更の場合だけfreshとする。
+`proposed_at_commit`とHEADが異なるだけではstaleではない。Git object、HEAD、source、履歴を取得・判定できない
+場合はstaleと推測せず`blocked`にする。不在、非accepted、stale、判定不能は別々の`runnable: false`理由として返す。
 
 ## 実装段階
 
@@ -97,7 +131,8 @@ Stage 1 は read-only。plan の作成・promotion・実装・commit・push・PR
 
 期限上限: 2026-08-24
 
-- supervisor は `aro plans next --json` だけを実行入力にする
+- supervisor は、lockを取得した対象repoの絶対pathを使う
+  `aro plans next --repo <absolute-repo-root> --json`だけを実行入力にする。cwdへ依存しない
 - repo 別 lock / lease / run id / `BASE_SHA` / stop switch / durable evidence
 - ARO を `DRY_RUN` から `LOCAL_CHANGES` へ段階導入する
 
@@ -128,7 +163,8 @@ Stage 1 は read-only。plan の作成・promotion・実装・commit・push・PR
 - [ ] `plans check/status/next` が fixture と実 repo で実行できる
 - [ ] active plan 0件、1件、複数件を決定的に扱う
 - [ ] invalid schema、invalid stage、Proposal不存在・非accepted・staleを停止理由として返す
-- [ ] permission は現在 stage と整合し、`merge: true` を拒否する
+- [ ] `permissions` は現在stageと整合し、`permissions.merge: true`を拒否する
+- [ ] 別repoをcwdにしても`--repo <absolute-repo-root>`で指定したrepoだけを評価する
 - [ ] JSON 出力が Hermes 以外の caller からも利用できる
 - [ ] distribution manifest と managed schema が同期する
 - [ ] project/policy limits 内に収まる

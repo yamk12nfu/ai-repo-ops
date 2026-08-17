@@ -28,14 +28,17 @@ scheduled-local improve の安全契約は distribution 0.1.10 に入ったが�
 各 repo が `.ai/local/execution-plans/*.md` に実行計画を所有し、ARO CLI が read-only で検証・解釈する
 Execution Plan Protocol の Stage 1を実装する。
 
-1. authoritative schemaで plan id、status、current stage、next action、Proposal参照、stage列、permissionを定義する。
+1. authoritative schemaで plan id、status、current stage、next action、Proposal参照、stage列、`permissions`を定義する。
 2. `aro plans check` はschemaとsemantic invariantを検査する。
 3. `aro plans status` はactive planと現在stageを返す。
 4. `aro plans next` は実行可能性、next action、Proposal、許可された副作用、blockerをJSONで返す。
 5. active planはrepoごとに最大1件とし、複数なら自動選択せずblockedにする。
-6. Proposal参照が不存在、非accepted、またはstaleならrunnableにしない。
-7. `merge: true` はv1で常に拒否する。
-8. managed schemaと新規consumerのallowed pathをdistributionから配布する。
+6. 現在のnext actionが参照するProposalが不存在、非accepted、stale、またはfreshness判定不能なら、
+   それぞれ別の理由で`runnable: false`にする。将来StageのProposalは現在actionの判定対象にしない。
+7. Proposalは`proposed_at_commit`がHEADの祖先で、全`sources[].path`がそのcommit以降未変更の場合だけfreshとする。
+   commitとHEADが異なるだけではstaleにせず、Git object・HEAD・source・履歴を取得できなければblockedにする。
+8. `permissions.merge: true` はv1で常に拒否する。
+9. managed schemaと新規consumerのallowed pathをdistributionから配布する。
 
 Stage 1はread-onlyであり、plan作成、stage promotion、実装、commit、push、PRを行わない。
 promotion guardとHermes runtime adapterは、Stage 1の実測後に別Proposal・別PRで実装する。
@@ -57,7 +60,8 @@ project/policyの10ファイル・400追加行上限に収める。収まらな�
 
 ## 判定方法
 
-- TDDでinvalid/valid fixtureから開始し、各テストが実装前に期待理由で失敗する。
+- TDDでinvalid/valid fixtureから開始し、各テストが実装前に期待理由で失敗する。不在、非accepted、stale、
+  freshness判定不能、複数active Plan、状態invariant違反、`permissions.merge: true`を個別fixtureで検証する。
 - `plans check/status/next` のtext/JSON契約をfixtureとself repoで検証する。
 - 既存Proposal check、guard、schema、typecheck、全test、buildを通す。
 - distribution syncのfixture testを通す。
