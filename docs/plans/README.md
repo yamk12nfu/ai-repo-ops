@@ -3,16 +3,20 @@
 MVP（Phase 0〜7: `aro init` / `diff` / `sync` / `doctor`）完了後の実装計画。
 各計画書は「**完了すると何ができるようになるか**」を冒頭に明示する。
 
-## 一覧と着手順
+## 一覧と現在地
 
-| # | 計画 | できるようになること（要約） | 前提 | 着手条件 |
-|---|---|---|---|---|
-| 01 | [リリース基盤（v1 タグ）](./01-release-v1.md) | `aro init` した repo の workflow が実際に起動する。中央の状態に名前を付けて配布できる | なし | **完了**（v0.1.0） |
-| 02 | [AI レビューコメンター](./02-ai-review-commenter.md) | ~~PR を開くと AI レビューコメントが自動で付く~~ **方向転換**: 実装は v0.1.1 で完了したが dogfooding は中止（CI での API キー AI 実行・secrets 配布・自前レビュー基盤は方針に合わない）。payload 検証は 03 に引き継ぎ | 01 | **打ち切り**（経緯は計画書冒頭の注記参照） |
-| 03 | [aro guard + ローカル改善ループ](./03-guard-and-improve-loop.md) | policies が `aro guard` で機械的に強制される（CI は AI なしの決定的検証）。改善ループは開発者が手元の Claude Code で回す（API 課金・secrets 配布なし） | 01 | **次の本命**。Stage 1（guard）から着手 |
-| 04 | [パッケージング](./04-packaging.md) | 中央 repo の外・任意の場所から `aro` を実行できる | 01 | fleet（05）に着手する前まで。03 Stage 1 の CI 組み込みを楽にする効果もある |
-| 05 | [fleet 診断 + rollout](./05-fleet-and-rollout.md) | 全対象 repo の状態を一覧できる。差分のある repo へ一括同期 PR を出せる | 04 | 参加 repo が 3 個を超えたら |
-| 06 | [Proposal Loop](./06-proposal-loop.md) | AI の提案が repo に残り、人間の採否と却下理由が蓄積される。採用済み提案が改善ループの入力になる | 03 | 03 Stage 2 の dogfooding で「提案が消える」痛みが出ている今 |
+この表が計画レベルの状態の正本である。`active` は原則1件だけとし、stageの詳細とDoDは各計画書に置く。
+
+| # | 計画 | Status | Current stage | できるようになること（要約） | 前提 |
+|---|---|---|---|---|---|
+| 00 | [Schema evolution](./00-schema-evolution.md) | `proposed` | — | schema互換性と将来のupgrade境界を定義する | 実際のmajor変更が必要になった時 |
+| 01 | [リリース基盤（v1 タグ）](./01-release-v1.md) | `completed` | — | `aro init` した repo の workflow が実際に起動する | なし |
+| 02 | [AI レビューコメンター](./02-ai-review-commenter.md) | `abandoned` | — | CI内AIレビューは実装後に方針転換し、決定的guardへ移行した | 01 |
+| 03 | [aro guard + ローカル改善ループ](./03-guard-and-improve-loop.md) | `completed` | — | policies を機械検証し、AI改善をローカルで回す | 01 |
+| 04 | [パッケージング](./04-packaging.md) | `completed` | — | 中央 repo 外から `aro` を実行し、pack smoke testで検証する | 01 |
+| 05 | [fleet 診断 + rollout](./05-fleet-and-rollout.md) | `proposed` | not-started | 全対象 repo の状態を一覧し、将来一括同期する | 04 / 参加repo増加 |
+| 06 | [Proposal Loop](./06-proposal-loop.md) | `completed` | — | 提案、人間の採否、freshness、実装待ちをrepoに残す | 03 |
+| 07 | [Execution Plan Protocol](./07-execution-plan-protocol.md) | `accepted` | protocol-foundation | repo が実行計画・現在stage・次操作・許可された副作用を所有する | 03 / 06 |
 
 ## 着手順の考え方
 
