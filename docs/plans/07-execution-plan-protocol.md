@@ -134,6 +134,8 @@ Stage 1 は read-only。plan の作成・promotion・実装・commit・push・PR
 - supervisor は、lockを取得した対象repoの絶対pathを使う
   `aro plans next --repo <absolute-repo-root> --json`だけを実行入力にする。cwdへ依存しない
 - repo 別 lock / lease / run id / `BASE_SHA` / stop switch / durable evidence
+- merge-base側の人間承認済みProposalだけから大型変更予算を取得し、AIの自己増額を拒否する
+  Proposal単位change budgetをStage 3開始前の必須gateとして稼働させる
 - ARO を `DRY_RUN` から `LOCAL_CHANGES` へ段階導入する
 
 ### Stage 4: distribution dogfooding
@@ -167,7 +169,7 @@ Stage 1 は read-only。plan の作成・promotion・実装・commit・push・PR
 - [ ] 別repoをcwdにしても`--repo <absolute-repo-root>`で指定したrepoだけを評価する
 - [ ] JSON 出力が Hermes 以外の caller からも利用できる
 - [ ] distribution manifest と managed schema が同期する
-- [ ] project/policy limits 内に収まる
+- [ ] project/policyの既定limits、またはProposalに記録された今回限りの人間承認済みbudget内に収まる
 - [ ] strict Proposal check、guard、schema、typecheck、全test、build が通る
 - [ ] fresh Claude Opus 5 review で blocking finding 0
 
