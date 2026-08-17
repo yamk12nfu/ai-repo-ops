@@ -8,6 +8,7 @@ import { registerSync } from "./commands/sync.js";
 import { registerDoctor } from "./commands/doctor.js";
 import { registerGuard } from "./commands/guard.js";
 import { registerKnowledge } from "./commands/knowledge.js";
+import { registerPlans } from "./commands/plans.js";
 import { registerProposals } from "./commands/proposals.js";
 
 /**
@@ -44,6 +45,7 @@ export function buildProgram(): Command {
   registerDoctor(program);
   registerGuard(program);
   registerKnowledge(program);
+  registerPlans(program);
   registerProposals(program);
 
   return program;

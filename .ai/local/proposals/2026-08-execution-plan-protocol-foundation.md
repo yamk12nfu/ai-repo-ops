@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: execution-plan-protocol-foundation
-status: accepted
+status: done
 proposed_at_commit: 87f4904c9040e61aa82b7208e3346da9e9d88eaa
 sources:
   - path: "docs/local-improve-loop.md"
