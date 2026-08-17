@@ -66,9 +66,10 @@ schema/distributionを含めると既定の10 files / 400 added linesへ収め�
 
 fooyaは本Proposalの実装PRに限り、次の変更予算を明示承認する。
 
-- `max_changed_files: 14`
+- `max_changed_files: 15`
 - `max_added_lines: 1200`
-- 理由: schema、CLI、tests、distributionを同一revisionで整合させ、TDDとconsumer fixtureを省略しないため
+- 理由: schema、CLI、tests、distributionを同一revisionで整合させ、TDDとconsumer fixtureを省略せず、
+  manifest変更でstaleになるaccepted Proposal 2件の人間revalidationも同じPRで完結させるため
 
 この例外が緩和するのは変更ファイル数と追加行数だけである。allowed/forbidden paths、managed file、
 workflow、project config、Proposal遷移、strict check、quality gates、独立review、人間mergeの境界は
