@@ -81,7 +81,7 @@ Plan statusは`proposed | active | blocked | completed | abandoned | superseded`
 | Plan | `proposed -> active` | 人間の承認が必要 |
 | Plan | `active <-> blocked` | blocked中は実行不可 |
 | Plan | `active -> completed` | 全Stage完了後だけ |
-| Plan | `proposed | active | blocked -> abandoned | superseded` | 人間の判断が必要なterminal遷移 |
+| Plan | `proposed/active/blocked -> abandoned or superseded` | 人間の判断が必要なterminal遷移 |
 | Stage | `pending -> active` | 直前Stageがcompletedの場合だけ。人間のpromotionが必要 |
 | Stage | `active <-> blocked` | blocked中は実行不可 |
 | Stage | `active -> completed` | DoDとevidenceが揃った場合だけ |
