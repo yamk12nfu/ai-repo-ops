@@ -4,7 +4,7 @@ id: workflow-seed-create-only-manual-followup
 status: accepted
 decision:
   by: yamk12nfu
-proposed_at_commit: 8d024a6c25b019d9adc529c8d65a2c6ec5ccf096
+proposed_at_commit: 20cbbf19d766179ccefb3b89a2e2b1efc4bf256d
 sources:
   - path: "distribution/base/manifest.yaml"
   - path: "distribution/base/files/.github/workflows/ai-review.yml"

@@ -52,6 +52,10 @@ const MANAGED_KNOWLEDGE_SCHEMA_COPY = path.join(
   "schemas",
   "knowledge.schema.json",
 );
+const AUTHORITATIVE_EXECUTION_SCHEMA = path.join(REPO_ROOT, "schemas", "execution-plan.schema.json");
+const MANAGED_EXECUTION_SCHEMA_COPY = path.join(
+  REPO_ROOT, "distribution", "base", "files", ".ai", "managed", "schemas", "execution-plan.schema.json",
+);
 const KNOWLEDGE_REFRESH_PROMPT = path.join(
   REPO_ROOT,
   "distribution",
@@ -253,6 +257,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
         ".ai/managed/schemas/knowledge.schema.json",
         ".ai/managed/schemas/project.schema.json",
         ".ai/managed/schemas/proposal.schema.json",
+        ".ai/managed/schemas/execution-plan.schema.json",
       ].sort(),
     );
     // 各 managed file は中身があり、canonical sha256 を持つ。
@@ -289,6 +294,13 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     const [authoritative, managed] = await Promise.all([
       readFile(AUTHORITATIVE_KNOWLEDGE_SCHEMA, "utf8"),
       readFile(MANAGED_KNOWLEDGE_SCHEMA_COPY, "utf8"),
+    ]);
+    expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
+  });
+
+  it("execution plan schema copy が authoritative schema と一致する", async () => {
+    const [authoritative, managed] = await Promise.all([
+      readFile(AUTHORITATIVE_EXECUTION_SCHEMA, "utf8"), readFile(MANAGED_EXECUTION_SCHEMA_COPY, "utf8"),
     ]);
     expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
   });
@@ -473,9 +485,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("scheduled local contractをdistribution 0.1.10として配布する", async () => {
+  it("scheduled local contractをdistribution 0.1.11として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.1.10");
+    expect(loaded.manifest.version).toBe("0.1.11");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {
@@ -578,6 +590,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       const ai = rendered["ai"];
       const allowedPaths = isPlainObject(ai) ? ai["allowed_paths"] : undefined;
       expect(Array.isArray(allowedPaths) ? allowedPaths : []).toContain(".ai/local/knowledge/**");
+      expect(Array.isArray(allowedPaths) ? allowedPaths : []).toContain(".ai/local/execution-plans/**");
     }
   });
 
@@ -585,6 +598,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
     const attributes = loaded.patches.find((patch) => patch.path === ".gitattributes");
     expect(attributes?.lines).toContain(".ai/local/knowledge/** text eol=lf");
+    expect(attributes?.lines).toContain(".ai/local/execution-plans/** text eol=lf");
   });
 
   it("配布するai-review workflowのpermissionsを必要最小限に限定する", async () => {

@@ -13,6 +13,8 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ### Added
 
+- Execution Plan Protocol Stage 1 の authoritative schema、`aro plans check/status/next`、Proposal freshness gate、
+  distribution managed schema、consumer の execution-plan allowed path を追加（distribution version 0.1.11）。
 - 明示 opt-in の scheduled local improve 契約を追加。開発者管理端末だけで、repo 排他、固定
   `BASE_SHA`、strict preflight と決定的 accepted 選定、base drift 時の 1 回限りの clean replay、
   Hermes / Codex / fresh Opus の役割分離、検証済み Draft PR 境界を適用する。対話型モードと人間による

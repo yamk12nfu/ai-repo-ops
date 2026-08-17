@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://ai-repo-ops.dev/schemas/execution-plan.schema.json",
+  "title": "ai-repo-ops Execution Plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "status", "updated_at", "proposals", "permissions", "stages"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "active", "blocked", "completed", "abandoned", "superseded"]
+    },
+    "current_stage": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "next_action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "proposal_id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+        "description": { "type": "string", "minLength": 1 },
+        "command": { "type": "string", "minLength": 1 }
+      }
+    },
+    "updated_at": { "type": "string", "minLength": 1 },
+    "proposals": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "push", "draft_pr", "merge"],
+      "properties": {
+        "commit": { "type": "boolean" },
+        "push": { "type": "boolean" },
+        "draft_pr": { "type": "boolean" },
+        "merge": { "type": "boolean" }
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "status": { "type": "string", "enum": ["pending", "active", "blocked", "completed"] },
+          "proposal_id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" }
+        }
+      }
+    }
+  }
+}
