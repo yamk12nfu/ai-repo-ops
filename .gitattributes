@@ -5,3 +5,4 @@
 .ai/local/knowledge/** text eol=lf
 .ai/local/proposals/** text eol=lf
 .github/workflows/ai-*.yml text eol=lf
+.ai/local/execution-plans/** text eol=lf
