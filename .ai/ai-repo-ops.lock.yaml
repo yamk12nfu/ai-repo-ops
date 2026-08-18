@@ -2,9 +2,9 @@ schema_version: 1
 source:
   repository: yamk12nfu/ai-repo-ops
   distribution: base
-  version: 0.1.8
+  version: 0.1.11
   commit: null
-  distribution_content_sha256: 24df3daa68a2d76226ec58a8634479867bd2e3aa41caa2bb138abf15bd40e75a
+  distribution_content_sha256: 9ef9c33a4fc84a700822dca8b023079dd9bc413d0ba6f8d2fcfd148070ab35be
 checksum:
   algorithm: sha256
   mode: canonical_text_lf_utf8bom_strip_v1
@@ -15,7 +15,7 @@ managed_files:
     strategy: managed_overwrite
   - path: .ai/managed/prompts/improve.md
     source: distribution/base/files/.ai/managed/prompts/improve.md
-    installed_sha256: 5c540992363ea2a13718099f0ded6fcf61789cbdbd93fc364c300a9003ebe228
+    installed_sha256: 8e1e728db92c6fba800ae35224e3e4b90aaada279d917642515f6b9ac140419a
     strategy: managed_overwrite
   - path: .ai/managed/prompts/issue-fix.md
     source: distribution/base/files/.ai/managed/prompts/issue-fix.md
@@ -31,7 +31,7 @@ managed_files:
     strategy: managed_overwrite
   - path: .ai/managed/prompts/propose.md
     source: distribution/base/files/.ai/managed/prompts/propose.md
-    installed_sha256: 0f55d7759136b02a2a759790fc9cb9dde6bb05765efdc576adb7a652a6e0c3b6
+    installed_sha256: e67442a0fecdc26c376640619a7feb73ddfc9b47638d45479027a5d7be74c8c6
     strategy: managed_overwrite
   - path: .ai/managed/policies/default.yaml
     source: distribution/base/files/.ai/managed/policies/default.yaml
@@ -57,6 +57,10 @@ managed_files:
     source: distribution/base/files/.ai/managed/schemas/proposal.schema.json
     installed_sha256: 3e5b30176edab78f867fff2553b890f6481ee207e24036dd4bce400b3e724c0c
     strategy: managed_overwrite
+  - path: .ai/managed/schemas/execution-plan.schema.json
+    source: distribution/base/files/.ai/managed/schemas/execution-plan.schema.json
+    installed_sha256: ab361226c22bf9c131d0280df34a2cb322edc57bbc60727196b5334fa163ed45
+    strategy: managed_overwrite
 seed_files:
   - path: .ai/project.yaml
     strategy: create_only
@@ -78,6 +82,7 @@ patches:
       - .ai/ai-repo-ops.lock.yaml text eol=lf
       - .ai/local/knowledge/** text eol=lf
       - .ai/local/proposals/** text eol=lf
+      - .ai/local/execution-plans/** text eol=lf
       - .github/workflows/ai-*.yml text eol=lf
   - type: append_unique_lines
     path: .prettierignore
@@ -86,4 +91,4 @@ patches:
       - .ai/managed/
       - .ai/ai-repo-ops.lock.yaml
 created_at: 2026-08-04T17:03:49.003Z
-updated_at: 2026-08-04T17:03:49.003Z
+updated_at: 2026-08-18T12:47:41.216Z
