@@ -112,11 +112,9 @@ forbidden_paths:
     expect(code).toBe(GUARD_EXIT.violations);
 
     const parsed = JSON.parse(cap.out()) as {
-      report: { violations: Array<{ kind: string; path?: string }> };
+      report: { violations: Array<{ kind: string; path?: string; message: string }> };
     };
-    expect(parsed.report.violations).toContainEqual(
-      expect.objectContaining({ kind: "execution_plan_promotion", path: PLAN_REL }),
-    );
+    expect(parsed.report.violations).toContainEqual(expect.objectContaining({ kind: "execution_plan_promotion", path: PLAN_REL, message: expect.stringContaining("statusをproposedからactiveへ") }));
   });
 
   it("stage/status/permission不変のupdated_atとevidence追記だけならexit 0", async () => {

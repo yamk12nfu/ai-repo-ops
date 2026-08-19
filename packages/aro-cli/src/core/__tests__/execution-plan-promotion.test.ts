@@ -31,6 +31,8 @@ function transition(base: ExecutionPlan, head: ExecutionPlan): ExecutionPlanTran
   };
 }
 
+function findingIds(base: ExecutionPlan, head: ExecutionPlan): string[] { return executionPlanTransitionFindings(transition(base, head)).map(({ id }) => id); }
+
 describe("executionPlanTransitionFindings", () => {
   it("Planの blocked → active を promotion finding として返す", () => {
     const findings = executionPlanTransitionFindings(
@@ -216,84 +218,79 @@ describe("executionPlanTransitionFindings", () => {
   });
 
   it("既存Stageの削除をhistory mutationとして返す", () => {
-    const base = plan("active", "active");
-    const head: ExecutionPlan = {
-      ...base,
-      stages: [{ id: "stage-1", status: "active" }],
-    };
-    const baseWithHistory: ExecutionPlan = {
-      ...base,
+    const base: ExecutionPlan = {
+      ...plan("active", "active"),
       stages: [
         { id: "stage-1", status: "active" },
         { id: "stage-2", status: "pending" },
       ],
     };
 
-    const findings = executionPlanTransitionFindings(transition(baseWithHistory, head));
-
-    expect(findings.map((finding) => finding.id)).toEqual(["stage.history.deleted"]);
+    expect(findingIds(base, { ...base, stages: base.stages.slice(0, 1) })).toEqual(["stage.history.deleted"]);
   });
 
   it("既存StageのID変更をhistory mutationとして返す", () => {
     const base = plan("active", "active");
+    expect(findingIds(base, { ...base, stages: [{ id: "renamed-stage", status: "active" }] })).toEqual(["stage.history.id-changed:stage-1"]);
+  });
+
+  it("同じ長さのStageの並べ替えをhistory mutationとして返す", () => {
+    const base: ExecutionPlan = {
+      ...plan("active", "active"),
+      stages: [
+        { id: "stage-1", status: "active" },
+        { id: "stage-2", status: "pending" },
+      ],
+    };
+    const head = { ...base, stages: [base.stages[1]!, base.stages[0]!] };
+
+    expect(findingIds(base, head)).toEqual(["stage.history.id-changed:stage-1", "stage.history.id-changed:stage-2"]);
+  });
+
+  it("既存Stageの前へのpending Stage挿入をhistory mutationとして返す", () => {
+    const base: ExecutionPlan = {
+      ...plan("active", "active"),
+      stages: [
+        { id: "stage-1", status: "active" },
+        { id: "stage-2", status: "pending" },
+      ],
+    };
     const head: ExecutionPlan = {
       ...base,
-      stages: [{ id: "renamed-stage", status: "active" }],
+      stages: [base.stages[0]!, { id: "stage-new", status: "pending" }, base.stages[1]!],
     };
 
-    const findings = executionPlanTransitionFindings(transition(base, head));
-
-    expect(findings.map((finding) => finding.id)).toEqual(["stage.history.id-changed:stage-1"]);
+    expect(findingIds(base, head)).toEqual(["stage.history.id-changed:stage-2", "stage.history.duplicate:stage-2"]);
   });
 
   it("末尾にpending以外のStageを追加する変更をhistory mutationとして返す", () => {
     const base = plan("active", "active");
-    const head: ExecutionPlan = {
-      ...base,
-      stages: [...base.stages, { id: "stage-2", status: "active" }],
-    };
-
-    const findings = executionPlanTransitionFindings(transition(base, head));
-
-    expect(findings.map((finding) => finding.id)).toEqual(["stage.history.append-not-pending:stage-2"]);
+    expect(findingIds(base, { ...base, stages: [...base.stages, { id: "stage-2", status: "active" }] })).toEqual([
+      "stage.history.append-not-pending:stage-2",
+    ]);
   });
 
   it("既存Stageのproposal_id変更をhistory mutationとして返す", () => {
-    const base = plan("active", "active");
-    const head: ExecutionPlan = {
-      ...base,
-      stages: [{ id: "stage-1", status: "active", proposal_id: "proposal-b" }],
-    };
-    const baseWithProposal: ExecutionPlan = {
-      ...base,
+    const base: ExecutionPlan = {
+      ...plan("active", "active"),
       stages: [{ id: "stage-1", status: "active", proposal_id: "proposal-a" }],
     };
 
-    const findings = executionPlanTransitionFindings(transition(baseWithProposal, head));
-
-    expect(findings.map((finding) => finding.id)).toEqual(["stage.history.proposal-changed:stage-1"]);
+    expect(findingIds(base, { ...base, stages: [{ ...base.stages[0]!, proposal_id: "proposal-b" }] })).toEqual([
+      "stage.history.proposal-changed:stage-1",
+    ]);
   });
 
   it("末尾へのpending Stage追加は許可する", () => {
     const base = plan("active", "active");
-    const head: ExecutionPlan = {
-      ...base,
-      stages: [...base.stages, { id: "stage-2", status: "pending" }],
-    };
-
-    expect(executionPlanTransitionFindings(transition(base, head))).toEqual([]);
+    expect(findingIds(base, { ...base, stages: [...base.stages, { id: "stage-2", status: "pending" }] })).toEqual([]);
   });
 
   it("末尾に既存IDのStageを重複追加する変更をhistory mutationとして返す", () => {
     const base = plan("active", "active");
-    const head: ExecutionPlan = {
-      ...base,
-      stages: [...base.stages, { id: "stage-1", status: "pending" }],
-    };
-
-    const findings = executionPlanTransitionFindings(transition(base, head));
-
-    expect(findings.map((finding) => finding.id)).toEqual(["stage.history.duplicate:stage-1"]);
+    expect(findingIds(base, { ...base, stages: [...base.stages, { id: "stage-1", status: "pending" }] })).toEqual([
+      "stage.history.duplicate:stage-1",
+    ]);
   });
 
   it("Planファイルの削除をpromotion findingとして返す", () => {

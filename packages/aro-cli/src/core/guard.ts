@@ -247,6 +247,7 @@ function checkFile(
  *   7. proposal_decision（`proposalTransitions` が渡された場合のみ。提案の採否遷移という
  *      **ファイル内容に基づく判定**で、判定ロジックは core/proposal-decision.ts。人間のみが行える
  *      遷移を含む PR を required check の fail として表面化させ、人間の override を要求する）
+ *   8. execution_plan_promotion（`executionPlanTransitions` が渡された場合のみ。Execution Plan の status / Stage / permission の昇格・履歴改変をファイル内容に基づいて判定する）
  *
  * `projectConfig` / `policy` は呼び出し側（commands/guard.ts）が merge-base（PR からは書き換えられない
  * revision）から読んだ値を渡す前提。ここではその revision の違いを意識しない（同じ入力なら同じ結果を

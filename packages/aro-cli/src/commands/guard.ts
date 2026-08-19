@@ -164,7 +164,7 @@ async function collectExecutionPlanTransitions(
   const transitions: ExecutionPlanTransition[] = [];
   const targets = changedFiles
     .filter((file) => isExecutionPlanPromotionTarget(file.path))
-    .sort((a, b) => a.path.localeCompare(b.path));
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
   for (const file of targets) {
     const baseText = await readFileAtRevision(repoRoot, mergeBaseSha, file.path);
     const headText = await readFileAtRevision(repoRoot, "HEAD", file.path);
