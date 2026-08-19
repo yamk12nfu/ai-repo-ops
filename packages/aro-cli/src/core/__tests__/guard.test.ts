@@ -442,6 +442,65 @@ describe("runGuard: proposal-scoped change budget", () => {
     expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2 }));
   });
 
+  it("accepted → done候補が0件ならbudgetはnot_applicableでproposalをnullにし、baselineを使う", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      proposalTransitions: [],
+    });
+
+    expect(report.budget).toEqual({
+      status: "not_applicable",
+      reason: "no unique accepted -> done Proposal candidate",
+      proposal: null,
+      requested: {},
+      ceiling: {},
+      applied: { max_changed_files: 2, max_added_lines: 10 },
+    });
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2, actual: 3 }));
+  });
+
+  it("accepted → done候補のbase Proposal frontmatterがschema-invalidならbudgetを拒否し、baselineを使う", () => {
+    const baseText = proposalText("accepted").replace("schema_version: 1", "schema_version: 2");
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      proposalTransitions: proposalTransition(baseText, proposalText("done")),
+    });
+
+    expect(report.budget).toEqual({
+      status: "rejected",
+      reason: "base Proposal frontmatter is invalid or unavailable for strict budget authentication",
+      proposal: null,
+      requested: {},
+      ceiling: {},
+      applied: { max_changed_files: 2, max_added_lines: 10 },
+    });
+    expect(report.violations).not.toContainEqual(expect.objectContaining({ kind: "proposal_decision" }));
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2, actual: 3 }));
+  });
+
+  it("accepted → done候補のbaseでdecision.byが空ならbudgetを拒否し、baselineを使う", () => {
+    // base/HEADのraw budgetはどちらも不在のまま、HEADだけを有効なdoneにする。
+    const baseText = proposalText("accepted").replace("  by: fooya", '  by: ""');
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      proposalTransitions: proposalTransition(baseText, proposalText("done")),
+    });
+
+    expect(report.budget).toEqual({
+      status: "rejected",
+      reason: "base Proposal frontmatter is invalid or unavailable for strict budget authentication",
+      proposal: null,
+      requested: {},
+      ceiling: {},
+      applied: { max_changed_files: 2, max_added_lines: 10 },
+    });
+    expect(report.violations).not.toContainEqual(expect.objectContaining({ kind: "proposal_decision" }));
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2, actual: 3 }));
+  });
+
   it("budgetなしの一意なaccepted → done候補はid/pathだけを返しbaselineを使う", () => {
     const report = runBudget({
       changedFiles: [file("src/a.ts")],
