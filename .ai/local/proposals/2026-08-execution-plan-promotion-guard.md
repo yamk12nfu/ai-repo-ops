@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: execution-plan-promotion-guard
-status: accepted
+status: done
 proposed_at_commit: 661f270bf54647093553e6269afa0565655cdb5b
 sources:
   - path: "docs/plans/07-execution-plan-protocol.md"
@@ -10,7 +10,7 @@ sources:
   - path: "packages/aro-cli/src/commands/guard.ts"
 decision:
   by: "fooya"
-  reason: "Stage 3の前提としてself-promotionをmerge-base基準で検出するStage 2を承認する。提案記載の遷移境界と、実装PRに限るmax_added_lines: 800の変更予算例外を含む。"
+  reason: "Stage 3の前提としてself-promotionをmerge-base基準で検出するStage 2を承認する。提案記載の遷移境界と、実装PRに限るmax_added_lines: 800の変更予算例外を含む。collateral Proposal 2件のprovenance更新とdone化を同一PRに含めるため、最終max_changed_files: 11も明示承認する。"
 ---
 
 ## 課題
