@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: proposal-scoped-change-budget
-status: open
+status: accepted
 proposed_at_commit: 6a2ed1031f17c685b2675e586b310bcf1f0c12d8
 sources:
   - path: "docs/plans/07-execution-plan-protocol.md"
@@ -12,8 +12,8 @@ sources:
   - path: "packages/aro-cli/src/core/policy.ts"
   - path: "schemas/proposal.schema.json"
 decision:
-  by: ""
-  reason: ""
+  by: "fooya"
+  reason: "Stage 3のwrite stage前提として、merge-base上の人間承認済みProposalだけから数値予算を認証し、AIの自己増額を拒否する設計を承認する。policy ceilingはmedium 20 files / 1600 added lines、low-risk 40 files / 4000 added lines、high-riskはbaselineを超える緩和なしとする。本Proposalの初回実装PRに限りbootstrap予算22 files / 1000 added linesを承認する。緩和対象はファイル数と追加行数だけで、path、managed file、workflow、Proposal/Plan遷移、strict check、quality gates、独立review、人間merge、release/deploy境界は変更しない。done Proposalを再accepted化してbudgetを再利用せず、再実装は新規Proposalで扱う。"
 ---
 
 ## 課題
