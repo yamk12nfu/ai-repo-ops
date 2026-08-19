@@ -13,7 +13,7 @@ sources:
   - path: "schemas/proposal.schema.json"
 decision:
   by: "fooya"
-  reason: "Stage 3のwrite stage前提として、merge-base上の人間承認済みProposalだけから数値予算を認証し、AIの自己増額を拒否する設計を承認する。policy ceilingはmedium 20 files / 1600 added lines、low-risk 40 files / 4000 added lines、high-riskはbaselineを超える緩和なしとする。本Proposalの初回実装PRに限りbootstrap予算22 files / 1000 added linesを承認する。緩和対象はファイル数と追加行数だけで、path、managed file、workflow、Proposal/Plan遷移、strict check、quality gates、独立review、人間merge、release/deploy境界は変更しない。done Proposalを再accepted化してbudgetを再利用せず、再実装は新規Proposalで扱う。"
+  reason: "Stage 3のwrite stage前提として、merge-base上の人間承認済みProposalだけから数値予算を認証し、AIの自己増額を拒否する設計を承認する。policy ceilingはmedium 20 files / 1600 added lines、low-risk 40 files / 4000 added lines、high-riskはbaselineを超える緩和なしとする。本Proposalの初回実装PRに限りbootstrap予算27 files / 1200 added linesを承認する。実装差分21 files / 1000 added linesに加え、accepted -> done、collateral stale 5 Proposalの人間revalidation、独立reviewで不足が判明したbudget認証拒否testsを同一revisionへ含めるための改訂であり、他のProposalへ再利用しない。緩和対象はファイル数と追加行数だけで、path、managed file、workflow、Proposal/Plan遷移、strict check、quality gates、独立review、人間merge、release/deploy境界は変更しない。done Proposalを再accepted化してbudgetを再利用せず、再実装は新規Proposalで扱う。"
 ---
 
 ## 課題
