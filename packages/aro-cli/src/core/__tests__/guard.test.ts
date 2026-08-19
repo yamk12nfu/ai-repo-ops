@@ -495,3 +495,52 @@ describe("runGuard: proposal_decision", () => {
     ]);
   });
 });
+
+describe("runGuard: execution_plan_promotion", () => {
+  const PLAN_PATH = ".ai/local/execution-plans/runtime.md";
+
+  it("Planの proposed → active は execution_plan_promotion violation", () => {
+    const report = runGuard({
+      changedFiles: [file(PLAN_PATH)],
+      projectConfig: projectConfig({ allowedPaths: [".ai/local/execution-plans/**"] }),
+      policy: policy(),
+      executionPlanTransitions: [
+        {
+          path: PLAN_PATH,
+          base: {
+            kind: "plan",
+            plan: {
+              schema_version: 1,
+              id: "runtime",
+              status: "proposed",
+              updated_at: "2026-08-18",
+              proposals: [],
+              permissions: { commit: false, push: false, draft_pr: false, merge: false },
+              stages: [{ id: "dry-run", status: "pending" }],
+            },
+          },
+          head: {
+            kind: "plan",
+            plan: {
+              schema_version: 1,
+              id: "runtime",
+              status: "active",
+              current_stage: "dry-run",
+              next_action: { id: "run-dry-run" },
+              updated_at: "2026-08-19",
+              proposals: [],
+              permissions: { commit: false, push: false, draft_pr: false, merge: false },
+              stages: [{ id: "dry-run", status: "active" }],
+            },
+          },
+        },
+      ],
+    } as Parameters<typeof runGuard>[0]);
+
+    expect(report.violations).toHaveLength(2);
+    expect(report.violations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "execution_plan_promotion", path: PLAN_PATH }),
+    ]));
+    expect(report.hasFailures).toBe(true);
+  });
+});

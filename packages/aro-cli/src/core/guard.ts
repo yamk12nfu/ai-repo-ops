@@ -23,6 +23,10 @@ import {
   proposalTransitionViolationMessage,
   type ProposalTransition,
 } from "./proposal-decision.js";
+import {
+  executionPlanTransitionFindings,
+  type ExecutionPlanTransition,
+} from "./execution-plan-promotion.js";
 
 /** 1 件の違反種別。 */
 export type GuardViolationKind =
@@ -33,7 +37,8 @@ export type GuardViolationKind =
   | "outside_allowed_paths"
   | "too_many_files"
   | "too_many_added_lines"
-  | "proposal_decision";
+  | "proposal_decision"
+  | "execution_plan_promotion";
 
 /** 1 件の違反。 */
 export interface GuardViolation {
@@ -116,6 +121,11 @@ export interface RunGuardInput {
    * ここではテキストの読み出し済み分類結果だけを受け取る。未指定なら判定しない。
    */
   proposalTransitions?: readonly ProposalTransition[] | undefined;
+  /**
+   * 変更された execution plan の merge-base 側 / HEAD 側の状態。
+   * revision からの読み出しは呼び出し側（commands/guard.ts）が行う。
+   */
+  executionPlanTransitions?: readonly ExecutionPlanTransition[] | undefined;
 }
 
 /** glob pattern 1 件分の matcher。 */
@@ -237,13 +247,21 @@ function checkFile(
  *   7. proposal_decision（`proposalTransitions` が渡された場合のみ。提案の採否遷移という
  *      **ファイル内容に基づく判定**で、判定ロジックは core/proposal-decision.ts。人間のみが行える
  *      遷移を含む PR を required check の fail として表面化させ、人間の override を要求する）
+ *   8. execution_plan_promotion（`executionPlanTransitions` が渡された場合のみ。Execution Plan の status / Stage / permission の昇格・履歴改変をファイル内容に基づいて判定する）
  *
  * `projectConfig` / `policy` は呼び出し側（commands/guard.ts）が merge-base（PR からは書き換えられない
  * revision）から読んだ値を渡す前提。ここではその revision の違いを意識しない（同じ入力なら同じ結果を
  * 返す純粋関数）。
  */
 export function runGuard(input: RunGuardInput): GuardReport {
-  const { changedFiles, projectConfig, policy, trustedSyncPaths, proposalTransitions } = input;
+  const {
+    changedFiles,
+    projectConfig,
+    policy,
+    trustedSyncPaths,
+    proposalTransitions,
+    executionPlanTransitions,
+  } = input;
 
   const forbiddenPatterns = [
     ...(projectConfig.ai?.forbidden_paths ?? []),
@@ -269,6 +287,16 @@ export function runGuard(input: RunGuardInput): GuardReport {
     const message = proposalTransitionViolationMessage(transition);
     if (message !== null) {
       rawViolations.push({ kind: "proposal_decision", path: transition.path, message });
+    }
+  }
+
+  for (const transition of executionPlanTransitions ?? []) {
+    for (const finding of executionPlanTransitionFindings(transition)) {
+      rawViolations.push({
+        kind: "execution_plan_promotion",
+        path: finding.path,
+        message: finding.message,
+      });
     }
   }
 

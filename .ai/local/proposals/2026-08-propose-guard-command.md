@@ -5,7 +5,7 @@ id: propose-prompt-guard-command-drift
 status: accepted
 decision:
   by: yamk12nfu
-proposed_at_commit: 20cbbf19d766179ccefb3b89a2e2b1efc4bf256d
+proposed_at_commit: 1039c197b7e7b0745e2636e6b98f4203a1c60ec2
 sources:
   # 注: 対象そのものは distribution/base/files/.ai/managed/prompts/propose.md（20 行目）だが、
   # source path の組み込み禁止パターン `**/.ai/**` が distribution 配下のコピーにも当たるため
