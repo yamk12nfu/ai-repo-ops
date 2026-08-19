@@ -23,6 +23,10 @@ import {
   proposalTransitionViolationMessage,
   type ProposalTransition,
 } from "./proposal-decision.js";
+import {
+  executionPlanTransitionFindings,
+  type ExecutionPlanTransition,
+} from "./execution-plan-promotion.js";
 
 /** 1 件の違反種別。 */
 export type GuardViolationKind =
@@ -33,7 +37,8 @@ export type GuardViolationKind =
   | "outside_allowed_paths"
   | "too_many_files"
   | "too_many_added_lines"
-  | "proposal_decision";
+  | "proposal_decision"
+  | "execution_plan_promotion";
 
 /** 1 件の違反。 */
 export interface GuardViolation {
@@ -116,6 +121,11 @@ export interface RunGuardInput {
    * ここではテキストの読み出し済み分類結果だけを受け取る。未指定なら判定しない。
    */
   proposalTransitions?: readonly ProposalTransition[] | undefined;
+  /**
+   * 変更された execution plan の merge-base 側 / HEAD 側の状態。
+   * revision からの読み出しは呼び出し側（commands/guard.ts）が行う。
+   */
+  executionPlanTransitions?: readonly ExecutionPlanTransition[] | undefined;
 }
 
 /** glob pattern 1 件分の matcher。 */
@@ -243,7 +253,14 @@ function checkFile(
  * 返す純粋関数）。
  */
 export function runGuard(input: RunGuardInput): GuardReport {
-  const { changedFiles, projectConfig, policy, trustedSyncPaths, proposalTransitions } = input;
+  const {
+    changedFiles,
+    projectConfig,
+    policy,
+    trustedSyncPaths,
+    proposalTransitions,
+    executionPlanTransitions,
+  } = input;
 
   const forbiddenPatterns = [
     ...(projectConfig.ai?.forbidden_paths ?? []),
@@ -269,6 +286,16 @@ export function runGuard(input: RunGuardInput): GuardReport {
     const message = proposalTransitionViolationMessage(transition);
     if (message !== null) {
       rawViolations.push({ kind: "proposal_decision", path: transition.path, message });
+    }
+  }
+
+  for (const transition of executionPlanTransitions ?? []) {
+    for (const finding of executionPlanTransitionFindings(transition)) {
+      rawViolations.push({
+        kind: "execution_plan_promotion",
+        path: finding.path,
+        message: finding.message,
+      });
     }
   }
 

@@ -36,6 +36,105 @@ beforeEach(async () => {
   await initRealGitRepo(repoRoot);
 });
 
+describe("executeGuard: execution_plan_promotion（実gitのmerge-base/HEAD比較）", () => {
+  const PLAN_REL = ".ai/local/execution-plans/runtime.md";
+  const PLANS_PROJECT_YAML = `schema_version: 1
+project:
+  name: demo
+  type: generic
+  risk_level: medium
+commands:
+  lint: ""
+quality_gates:
+  required: []
+ai:
+  max_changed_files: 5
+  allowed_paths:
+    - ".ai/local/execution-plans/**"
+review:
+  require_human_review: true
+evals: {}
+`;
+  const PLANS_POLICY = `schema_version: 1
+name: default
+change_limits:
+  max_changed_files: 10
+  max_added_lines: 400
+forbidden_paths:
+  - "secrets/**"
+`;
+
+  function planText(
+    status: "proposed" | "active",
+    stageStatus: "pending" | "active",
+    updatedAt: string,
+    evidence = "",
+  ): string {
+    return [
+      "---",
+      "schema_version: 1",
+      "id: runtime",
+      `status: ${status}`,
+      ...(status === "active" ? ["current_stage: stage-1", "next_action:", "  id: run-stage-1"] : []),
+      `updated_at: ${updatedAt}`,
+      "proposals: []",
+      "permissions:",
+      "  commit: false",
+      "  push: false",
+      "  draft_pr: false",
+      "  merge: false",
+      "stages:",
+      "  - id: stage-1",
+      `    status: ${stageStatus}`,
+      "---",
+      "",
+      "# Runtime evidence",
+      ...(evidence.length > 0 ? [evidence] : []),
+      "",
+    ].join("\n");
+  }
+
+  async function setupPlansRepo(): Promise<void> {
+    await writeRaw(repoRoot, ".ai/project.yaml", PLANS_PROJECT_YAML);
+    await writeRaw(repoRoot, ".ai/managed/policies/default.yaml", PLANS_POLICY);
+    await writeRaw(repoRoot, PLAN_REL, planText("proposed", "pending", "2026-08-18"));
+    await gitCommitAll(repoRoot, "chore: add proposed execution plan");
+  }
+
+  it("committed baseのproposed → active promotionはHEAD比較でexit 1", async () => {
+    await setupPlansRepo();
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PLAN_REL, planText("active", "active", "2026-08-19"));
+    await gitCommitAll(repoRoot, "chore: promote execution plan");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main", json: true }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+
+    const parsed = JSON.parse(cap.out()) as {
+      report: { violations: Array<{ kind: string; path?: string }> };
+    };
+    expect(parsed.report.violations).toContainEqual(
+      expect.objectContaining({ kind: "execution_plan_promotion", path: PLAN_REL }),
+    );
+  });
+
+  it("stage/status/permission不変のupdated_atとevidence追記だけならexit 0", async () => {
+    await writeRaw(repoRoot, ".ai/project.yaml", PLANS_PROJECT_YAML);
+    await writeRaw(repoRoot, ".ai/managed/policies/default.yaml", PLANS_POLICY);
+    await writeRaw(repoRoot, PLAN_REL, planText("proposed", "pending", "2026-08-18", "base evidence"));
+    await gitCommitAll(repoRoot, "chore: add proposed execution plan");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PLAN_REL, planText("proposed", "pending", "2026-08-19", "run evidence"));
+    await gitCommitAll(repoRoot, "docs: record execution evidence");
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main", json: true }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+    expect(JSON.parse(cap.out())).toMatchObject({ report: { violations: [] } });
+  });
+});
+
 afterEach(async () => {
   await rm(repoRoot, { recursive: true, force: true });
 });

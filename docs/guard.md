@@ -27,6 +27,7 @@ aro guard --repo /path/to/your-repo --base main --json   # 機械可読出力
 | `too_many_files` | 変更ファイル数が上限超過（`ai.max_changed_files` と policy の `change_limits.max_changed_files` の厳しい方） |
 | `too_many_added_lines` | 追加行数合計が policy の `change_limits.max_added_lines` を超過 |
 | `proposal_decision` | 提案（`.ai/local/proposals/*.md`）の採否・状態の遷移のうち、人間のみが行えるもの（下記「proposal_decision の扱い」参照） |
+| `execution_plan_promotion` | Execution Plan のpromotion、権限拡大、履歴変更、削除・判定不能を人間レビュー対象として表面化（下記参照） |
 
 glob 評価は `picomatch`（`dot: true, nocase: true`。distribution の保護 path 判定と同じ規約）。
 `risk_level` → 適用 policy の対応は `low` → `low-risk.yaml` / `medium` → `default.yaml` /
@@ -52,7 +53,7 @@ severity:
 
 分ける理由は、検証項目の性格が 2 種類あるためである。
 
-- **不変条件**（`managed_file` / `workflow` / `project_config` / `forbidden_path`）— 誰が変更しても
+- **不変条件**（`managed_file` / `workflow` / `project_config` / `forbidden_path` / `execution_plan_promotion`）— 誰が変更しても
   危険なので、行為者を問わず `fail` にする
 - **AI の行動半径の制限**（`outside_allowed_paths` / `too_many_files` / `too_many_added_lines`）—
   `allowed_paths` は定義上「AI が変更してよい path」であり、人間が書いた feature PR に required check
@@ -157,6 +158,34 @@ merge-base（= すでに base branch に merge 済みの、信頼できる設定
 merge する（`project_config` と同じ運用。緩めない理由も同じで、AI が自分に有利な状態変更を
 人間に気づかれずに通す経路を塞ぐため）。frontmatter の schema 妥当性（`decision.by` の必須性等）は
 `aro proposals check` の責務であり、guard は遷移の判定に必要な `status` だけを読む。
+
+## `execution_plan_promotion` の扱い（運用方針）
+
+Execution Plan（`.ai/local/execution-plans/*.md`）は、merge-base revision とコミット済み `HEAD` の
+frontmatterを比較する。working treeやHEAD側のpolicyは読まないため、PR自身が計画・検証ルールを
+書き換えてpromotion検出を迂回することはできない。判定対象は、`git diff <merge-base>...HEAD` に
+含まれるPlanファイルだけである。
+
+次の変更は `execution_plan_promotion`（policyにkindの記載がない場合も既定で `fail`）になる。
+
+- Planの `proposed` / `blocked` → `active`、安全側の `active` → `blocked` を除くstatus変更、Planのterminal化
+- Stageの `pending` / `blocked` → `active`、`active` → `completed` などの前進・再開
+- `permissions.commit` / `push` / `draft_pr` の `false` → `true`
+- `permissions.merge: true`（既存値のままでも常に拒否）
+- 既存Stageの削除・IDまたは `proposal_id` の変更・並べ替え、末尾以外の追加、pending以外の追加
+- Planファイルの削除、またはmerge-base / HEAD側のfrontmatterを読めず遷移を判定できない場合
+
+次の変更はpromotion違反にしない。
+
+- Plan/Stage/permissionの状態を変えない本文・evidence・`updated_at`・`next_action` の更新
+- `active` → `blocked` の安全側への停止、permissionの `true` → `false`
+- 新規Planの `status: proposed`、全Stage `pending`、全permission `false` での追加
+- 既存Stageを保持したまま末尾へ `pending` Stageだけを追加
+
+1ファイルに複数の対象がある場合は、Plan status、Stage履歴、Stage status、permission、merge拒否の
+順で全件を決定的に返す。`execution_plan_promotion` は承認を自動化せず、人間が内容を確認して
+required checkを明示的にoverrideする境界である。Planのschema・semantic invariantやevidence本文の
+意味判定は `aro plans check` の責務で、guardは状態遷移と権限境界だけを扱う。
 
 ## `--json` 出力
 

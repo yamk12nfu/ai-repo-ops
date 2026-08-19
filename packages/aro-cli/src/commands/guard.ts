@@ -32,6 +32,11 @@ import { ProjectConfigError, PolicyError } from "../core/errors.js";
 import { assertGitRepo } from "../core/git.js";
 import { getChangedFiles, getMergeBase, readFileAtRevision } from "../core/git-diff.js";
 import { runGuard, type GuardReport } from "../core/guard.js";
+import {
+  executionPlanFileStateFromText,
+  isExecutionPlanPromotionTarget,
+  type ExecutionPlanTransition,
+} from "../core/execution-plan-promotion.js";
 import { LOCKFILE_RELATIVE_PATH, parseLockFile } from "../core/lockfile.js";
 import { PROJECT_YAML_PATH } from "../core/manifest.js";
 import { parsePolicy, policyPathForRiskLevel, type Policy } from "../core/policy.js";
@@ -151,6 +156,27 @@ async function collectProposalTransitions(
   return transitions;
 }
 
+async function collectExecutionPlanTransitions(
+  repoRoot: string,
+  mergeBaseSha: string,
+  changedFiles: readonly { path: string }[],
+): Promise<ExecutionPlanTransition[]> {
+  const transitions: ExecutionPlanTransition[] = [];
+  const targets = changedFiles
+    .filter((file) => isExecutionPlanPromotionTarget(file.path))
+    .sort((a, b) => a.path.localeCompare(b.path));
+  for (const file of targets) {
+    const baseText = await readFileAtRevision(repoRoot, mergeBaseSha, file.path);
+    const headText = await readFileAtRevision(repoRoot, "HEAD", file.path);
+    transitions.push({
+      path: file.path,
+      base: executionPlanFileStateFromText(baseText),
+      head: executionPlanFileStateFromText(headText),
+    });
+  }
+  return transitions;
+}
+
 /**
  * guard を実行し終了コードを返す（process.exit には触れない）。
  * 出力は {@link GuardIo} 経由で行うため、テストから writer を差し替えて検証できる。
@@ -197,6 +223,11 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
       mergeBaseSha,
       changedFiles,
     );
+    const executionPlanTransitions = await collectExecutionPlanTransitions(
+      repoRoot,
+      mergeBaseSha,
+      changedFiles,
+    );
 
     const report: GuardReport = runGuard({
       changedFiles,
@@ -206,6 +237,7 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
         trustedSync.status === "authenticated" ? trustedSync.paths : [],
       ),
       proposalTransitions,
+      executionPlanTransitions,
     });
 
     if (options.json) {

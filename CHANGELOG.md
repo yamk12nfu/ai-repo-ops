@@ -11,6 +11,11 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Added
+
+- `aro guard` に `execution_plan_promotion` violation を追加。merge-base とコミット済み HEAD の
+  Execution Plan を比較し、promotion・権限拡大・不可逆なStage履歴変更・削除・判定不能を人間レビュー対象として表面化する。`permissions.merge: true` は常に拒否し、evidenceのみの更新と安全側の停止は許可する。
+
 ## [0.4.1] - 2026-08-18
 
 ### Added
