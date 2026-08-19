@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: proposal-scoped-change-budget
-status: accepted
+status: done
 proposed_at_commit: 6a2ed1031f17c685b2675e586b310bcf1f0c12d8
 sources:
   - path: "docs/plans/07-execution-plan-protocol.md"
