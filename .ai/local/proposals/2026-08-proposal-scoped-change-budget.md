@@ -13,7 +13,7 @@ sources:
   - path: "schemas/proposal.schema.json"
 decision:
   by: "fooya"
-  reason: "Stage 3のwrite stage前提として、merge-base上の人間承認済みProposalだけから数値予算を認証し、AIの自己増額を拒否する設計を承認する。policy ceilingはmedium 20 files / 1600 added lines、low-risk 40 files / 4000 added lines、high-riskはbaselineを超える緩和なしとする。本Proposalの初回実装PRに限りbootstrap予算22 files / 1000 added linesを承認する。緩和対象はファイル数と追加行数だけで、path、managed file、workflow、Proposal/Plan遷移、strict check、quality gates、独立review、人間merge、release/deploy境界は変更しない。done Proposalを再accepted化してbudgetを再利用せず、再実装は新規Proposalで扱う。"
+  reason: "Stage 3のwrite stage前提として、merge-base上の人間承認済みProposalだけから数値予算を認証し、AIの自己増額を拒否する設計を承認する。policy ceilingはmedium 20 files / 1600 added lines、low-risk 40 files / 4000 added lines、high-riskはbaselineを超える緩和なしとする。本Proposalの初回実装PRに限りbootstrap予算27 files / 1200 added linesを承認する。実装差分21 files / 1000 added linesに加え、accepted -> done、collateral stale 5 Proposalの人間revalidation、独立reviewで不足が判明したbudget認証拒否testsを同一revisionへ含めるための改訂であり、他のProposalへ再利用しない。緩和対象はファイル数と追加行数だけで、path、managed file、workflow、Proposal/Plan遷移、strict check、quality gates、独立review、人間merge、release/deploy境界は変更しない。done Proposalを再accepted化してbudgetを再利用せず、再実装は新規Proposalで扱う。"
 ---
 
 ## 課題
@@ -183,7 +183,8 @@ budgetが変更できるのは`too_many_files`と`too_many_added_lines`の数値
 5. consumerはdistribution sync後にbudget緩和を利用する。policy未syncならceilingがなく緩和は不発とする
 6. 古いローカルCLIは新budget schemaを拒否するため、budget付きProposalを扱う前に更新する
 
-本Proposalの実装予算は、現時点の見積りとして最大22 files / 1000 added linesを求める。これは
+本Proposalの実装予算は、当初見積り22 files / 1000 added linesから、実装・独立review後の
+人間decisionで最大27 files / 1200 added linesへ改訂した。これは
 schema、parser、proposal transition、guard core/command、policy、既存test群、docs、distribution、
 Proposalのdone化、collateral stale revalidationを一つの整合したPRへ含めるためのbootstrap例外である。
 accept時に人間が数値と理由を確定し、`decision.reason`へ記録する。
@@ -208,7 +209,7 @@ budgetを持たない通常のaccepted Proposalでも、`accepted -> done`が一
 - budgetの付与・変更・削除・parse不能をすべて`proposal_decision`にすることが過不足ないか
 - 複数の`accepted -> done`でbudgetを適用しないことが、1 Proposal = 1 PRの境界として妥当か
 - medium 20/1600、low-risk 40/4000、high-risk無効というceiling候補が妥当か
-- bootstrap実装予算22 files / 1000 linesと、release -> self-syncの順序を承認するか
+- bootstrap実装予算27 files / 1200 linesと、release -> self-syncの順序を承認するか
 - done Proposalを再びacceptedへ戻してbudgetを再利用するのではなく、差し戻しは新規Proposalで扱う運用にするか
 
 実装時のacceptance criteriaは次のとおりとする。
