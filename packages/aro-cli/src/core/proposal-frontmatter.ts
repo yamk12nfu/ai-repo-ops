@@ -31,10 +31,23 @@ const proposalSourceSchema = z
   })
   .strict();
 
+const proposalBudgetSchema = z
+  .object({
+    max_changed_files: z.number().int().min(1).optional(),
+    max_added_lines: z.number().int().min(0).optional(),
+    reason: z.string().refine((value) => value.trim().length > 0, "reasonは空白以外を含む必要があります。"),
+  })
+  .strict()
+  .refine(
+    (budget) => budget.max_changed_files !== undefined || budget.max_added_lines !== undefined,
+    "max_changed_filesまたはmax_added_linesの少なくとも一方が必要です。",
+  );
+
 const proposalDecisionSchema = z
   .object({
     by: z.string().default(""),
     reason: z.string().default(""),
+    budget: proposalBudgetSchema.optional(),
   })
   .strict();
 
@@ -90,9 +103,21 @@ export const proposalFrontmatterSchema = z
         message: `statusが${frontmatter.status}の提案ではdecision.reason（判断の理由）が必須です。`,
       });
     }
+    if (
+      frontmatter.decision.budget !== undefined &&
+      frontmatter.status !== "accepted" &&
+      frontmatter.status !== "done"
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["decision", "budget"],
+        message: "decision.budgetはstatusがacceptedまたはdoneの提案でのみ指定できます。",
+      });
+    }
   });
 
 export type ProposalFrontmatter = z.infer<typeof proposalFrontmatterSchema>;
+export type ProposalBudget = NonNullable<ProposalFrontmatter["decision"]["budget"]>;
 export type ProposalStatus = ProposalFrontmatter["status"];
 export type ProposalSource = ProposalFrontmatter["sources"][number];
 

@@ -151,6 +151,8 @@ async function collectProposalTransitions(
       path: file.path,
       base: proposalFileStateFromText(baseText),
       head: proposalFileStateFromText(headText),
+      baseText,
+      headText,
     });
   }
   return transitions;
@@ -233,6 +235,8 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
       changedFiles,
       projectConfig,
       policy,
+      baseInput: options.base,
+      mergeBaseSha,
       trustedSyncPaths: new Set(
         trustedSync.status === "authenticated" ? trustedSync.paths : [],
       ),
@@ -242,7 +246,7 @@ export async function executeGuard(options: GuardOptions, io: GuardIo): Promise<
 
     if (options.json) {
       io.stdout(
-        `${JSON.stringify({ command: "guard", ok: !report.hasFailures, base: options.base, trustedSync, report }, null, 2)}\n`,
+        `${JSON.stringify({ command: "guard", ok: !report.hasFailures, base: options.base, mergeBaseSha, budget: report.budget, trustedSync, report }, null, 2)}\n`,
       );
     } else {
       io.stdout(

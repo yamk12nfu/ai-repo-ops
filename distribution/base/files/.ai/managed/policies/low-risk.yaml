@@ -9,6 +9,9 @@ description: low リスク向けポリシー。変更上限を広げ、安全な
 change_limits:
   max_changed_files: 25
   max_added_lines: 1000
+  budget_ceiling:
+    max_changed_files: 40
+    max_added_lines: 4000
 
 # violation ごとの扱い（default.yaml の説明を参照）。表に無い kind は fail 扱い。
 severity:

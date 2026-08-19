@@ -19,8 +19,10 @@ import picomatch from "picomatch";
 
 import {
   PROPOSAL_STATUSES,
+  parseProposalDocument,
   PROPOSALS_ROOT,
   splitProposalFrontmatter,
+  type ProposalBudget,
   type ProposalStatus,
 } from "./proposal-frontmatter.js";
 import { parseYaml } from "./yaml.js";
@@ -49,6 +51,11 @@ export type ProposalFileState =
   | { kind: "absent" }
   | { kind: "unreadable"; detail: string }
   | { kind: "proposal"; status: ProposalStatus };
+
+export type ProposalBudgetState =
+  | { kind: "absent" }
+  | { kind: "valid"; budget: ProposalBudget }
+  | { kind: "invalid"; detail: string };
 
 function isProposalStatus(value: unknown): value is ProposalStatus {
   return typeof value === "string" && (PROPOSAL_STATUSES as readonly string[]).includes(value);
@@ -98,6 +105,79 @@ export interface ProposalTransition {
   base: ProposalFileState;
   /** HEAD 側の状態。 */
   head: ProposalFileState;
+  /** merge-base 側の生テキスト（budget保護とstrict認証に使う。省略時は従来のstatus判定のみ）。 */
+  baseText?: string | null;
+  /** HEAD 側の生テキスト（budget保護とstrict認証に使う。省略時は従来のstatus判定のみ）。 */
+  headText?: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function proposalBudgetStateFromText(text: string | null): ProposalBudgetState {
+  if (text === null) return { kind: "absent" };
+
+  let frontmatterYaml: string;
+  try {
+    frontmatterYaml = splitProposalFrontmatter(text).frontmatterYaml;
+  } catch {
+    return { kind: "absent" };
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(frontmatterYaml);
+  } catch {
+    return { kind: "absent" };
+  }
+  if (!isRecord(parsed) || !isRecord(parsed["decision"]) || !Object.hasOwn(parsed["decision"], "budget")) {
+    return { kind: "absent" };
+  }
+
+  try {
+    const document = parseProposalDocument(text);
+    const budget = document.frontmatter.decision.budget;
+    return budget === undefined
+      ? { kind: "invalid", detail: "decision.budgetを解釈できません" }
+      : { kind: "valid", budget };
+  } catch (error) {
+    return {
+      kind: "invalid",
+      detail: error instanceof Error ? error.message.split("\n")[0] ?? "schema不適合" : "schema不適合",
+    };
+  }
+}
+
+function sameBudget(left: ProposalBudget, right: ProposalBudget): boolean {
+  return (
+    left.max_changed_files === right.max_changed_files &&
+    left.max_added_lines === right.max_added_lines &&
+    left.reason === right.reason
+  );
+}
+
+export function proposalBudgetTransitionViolationMessage(
+  transition: ProposalTransition,
+): string | null {
+  if (transition.baseText === undefined && transition.headText === undefined) return null;
+
+  const baseBudget = proposalBudgetStateFromText(transition.baseText ?? null);
+  const headBudget = proposalBudgetStateFromText(transition.headText ?? null);
+  if (baseBudget.kind === "invalid") {
+    return `提案のdecision.budgetを解釈できないため、人間の予算承認を検証できません（${baseBudget.detail}）: ${transition.path}`;
+  }
+  if (headBudget.kind === "invalid") {
+    const detail = headBudget.detail;
+    return `提案のdecision.budgetを解釈できないため、人間の予算承認を検証できません（${detail}）: ${transition.path}`;
+  }
+  if (
+    (baseBudget.kind === "absent" && headBudget.kind === "absent") ||
+    (baseBudget.kind === "valid" && headBudget.kind === "valid" && sameBudget(baseBudget.budget, headBudget.budget))
+  ) {
+    return null;
+  }
+  return `提案のdecision.budgetが付与・変更・削除されています。予算承認の変更は人間のみが行えます: ${transition.path}`;
 }
 
 /**
@@ -116,6 +196,9 @@ export interface ProposalTransition {
  */
 export function proposalTransitionViolationMessage(transition: ProposalTransition): string | null {
   const { path, base, head } = transition;
+
+  const budgetMessage = proposalBudgetTransitionViolationMessage(transition);
+  if (budgetMessage !== null) return budgetMessage;
 
   if (base.kind === "unreadable" || head.kind === "unreadable") {
     const side = head.kind === "unreadable" ? head : (base as { detail: string });

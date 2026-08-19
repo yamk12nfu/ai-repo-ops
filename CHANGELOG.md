@@ -15,6 +15,10 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 - `aro guard` に `execution_plan_promotion` violation を追加。merge-base とコミット済み HEAD の
   Execution Plan を比較し、promotion・権限拡大・不可逆なStage履歴変更・削除・判定不能を人間レビュー対象として表面化する。`permissions.merge: true` は常に拒否し、evidenceのみの更新と安全側の停止は許可する。
+- `aro guard` に人間承認済みProposal単位のchange budget認証・合成・出力を追加。full merge-base SHAと
+  一意な `accepted → done` 遷移を要求し、medium 20/1600・low-risk 40/4000のpolicy ceiling内だけで
+  `too_many_files` / `too_many_added_lines`を限定的に緩和する。budgetの変更は既存の
+  `proposal_decision` violationとして拒否し、high-riskのbaselineは緩和しない（distribution 0.1.12）。
 
 ## [0.4.1] - 2026-08-18
 

@@ -24,8 +24,8 @@ aro guard --repo /path/to/your-repo --base main --json   # 機械可読出力
 | `workflow` | `.github/workflows/**` への変更（設定に依らない既定。workflow の自己書き換え禁止） |
 | `project_config` | `.ai/project.yaml` 自体への変更（下記「project_config の扱い」参照） |
 | `outside_allowed_paths` | `ai.allowed_paths` 定義時、そのいずれにも一致しない変更（未定義なら検査しない） |
-| `too_many_files` | 変更ファイル数が上限超過（`ai.max_changed_files` と policy の `change_limits.max_changed_files` の厳しい方） |
-| `too_many_added_lines` | 追加行数合計が policy の `change_limits.max_added_lines` を超過 |
+| `too_many_files` | 変更ファイル数が実効上限超過（通常は `ai.max_changed_files` と policy の `change_limits.max_changed_files` の厳しい方。認証済みProposal budgetがあれば下記の合成結果） |
+| `too_many_added_lines` | 追加行数合計が実効上限超過（通常は policy の `change_limits.max_added_lines`。認証済みProposal budgetがあれば下記の合成結果） |
 | `proposal_decision` | 提案（`.ai/local/proposals/*.md`）の採否・状態の遷移のうち、人間のみが行えるもの（下記「proposal_decision の扱い」参照） |
 | `execution_plan_promotion` | Execution Plan のpromotion、権限拡大、履歴変更、削除・判定不能を人間レビュー対象として表面化（下記参照） |
 
@@ -71,6 +71,47 @@ severity:
 **AI に対する強制は CI ではなく AI の意思決定点で担保する。** 改善ループの AI は PR 作成前に
 `aro guard` を自己実行する義務があり（`.ai/managed/prompts/improve.md`）、そこでは `warn` も
 中止条件として扱う。加えて `review.require_human_review: true` により merge は常に人間が判断する。
+
+## Proposal-scoped change budget
+
+大型変更のためにrepo全体のroutine上限を恒久的に緩めず、`decision.budget` を人間承認済みの1件の
+実装Proposalへ限定的に適用できる。Proposal schema上の形式は次のとおりである。
+
+```yaml
+status: accepted
+decision:
+  by: "人間の名前"
+  budget:
+    max_changed_files: 15       # optional、1以上の整数
+    max_added_lines: 1200        # optional、0以上の整数
+    reason: "承認理由"           # 空白以外を含む必須文字列
+```
+
+`max_changed_files` / `max_added_lines` は少なくとも一方を指定する。budgetは `accepted` または
+`done` のProposalだけで許可し、unknown field、負値、非整数、空budget、空白だけのreasonは
+`aro proposals check` のstrict schemaで拒否する。
+
+guardは、merge-base側が `accepted`、コミット済みHEAD側が `done` となる一意のProposalだけを候補にする。
+base側frontmatter全体をstrictにparseし、`decision.by` とbudgetが有効であることを確認する。
+budgetを適用するには `--base` にbranch refではなく、fetch済みdefault branchから固定したlowercaseの
+完全な `BASE_SHA` を渡し、解決したmerge-base SHAと完全一致させる必要がある。一意な候補のid/pathは、
+budgetが無い場合やbranch refの場合も出力するが、budgetはbaselineへ戻して適用しない。
+
+budgetの付与・数値またはreasonの変更・削除・parse不能、および新規Proposalへのbudget混入は、既存の
+`proposal_decision` violationとしてfail-closedにする。baseとHEADで同じbudgetを保持した
+`accepted → done`だけが正常である。候補が0件なら不適用、2件以上なら合算・最大値選択をせず拒否し、
+Proposalをnullとしてroutine baselineを使う。
+
+数値軸は独立に合成する。baselineはfilesがproject/policyの厳しい方、linesがpolicyの値である。
+要求値がbaseline以下ならその厳しい値を適用し、baselineを上回る要求にはpolicyの
+`change_limits.budget_ceiling`を要求する。ceilingが無ければその軸だけbaselineへ戻し、あれば
+`min(requested, ceiling)`を適用する。ceilingはroutine limit以上でなければpolicy parse時に拒否する。
+配布初期値はmediumが20 files / 1600 lines、low-riskが40 files / 4000 lines、high-riskはceilingなし
+（baseline超過のbudget緩和なし）である。
+
+budgetが変更できるのは `too_many_files` と `too_many_added_lines` の実効数値だけである。
+allowed/forbidden path、managed file、workflow、project config、Proposal/Plan遷移、trusted sync、
+strict check、quality gate、独立review、人間merge、release/deploy境界は一切緩和しない。
 
 [issue #33]: https://github.com/yamk12nfu/ai-repo-ops/issues/33
 
@@ -194,6 +235,15 @@ required checkを明示的にoverrideする境界である。Planのschema・sem
   "command": "guard",
   "ok": false,
   "base": "main",
+  "mergeBaseSha": "0123456789abcdef0123456789abcdef01234567",
+  "budget": {
+    "status": "not_applicable",
+    "reason": "unique Proposal has no decision.budget",
+    "proposal": { "id": "sample-proposal", "path": ".ai/local/proposals/2026-08-sample.md" },
+    "requested": {},
+    "ceiling": { "max_changed_files": 20, "max_added_lines": 1600 },
+    "applied": { "max_changed_files": 10, "max_added_lines": 400 }
+  },
   "trustedSync": {
     "status": "rejected",
     "reason": "content_mismatch",
@@ -205,6 +255,14 @@ required checkを明示的にoverrideする境界である。Planのschema・sem
     }
   },
   "report": {
+    "budget": {
+      "status": "not_applicable",
+      "reason": "unique Proposal has no decision.budget",
+      "proposal": { "id": "sample-proposal", "path": ".ai/local/proposals/2026-08-sample.md" },
+      "requested": {},
+      "ceiling": { "max_changed_files": 20, "max_added_lines": 1600 },
+      "applied": { "max_changed_files": 10, "max_added_lines": 400 }
+    },
     "violations": [
       { "kind": "forbidden_path", "path": "secrets/key.pem", "message": "..." }
     ],

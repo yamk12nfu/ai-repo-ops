@@ -50,6 +50,35 @@ describe("parsePolicyValue", () => {
     expect(policy.change_limits?.max_changed_files).toBe(10);
     expect(policy.forbidden_paths).toEqual([".env", "secrets/**"]);
   });
+
+  it("budget_ceilingの両軸をparseできる", () => {
+    const policy = parsePolicyValue({
+      change_limits: {
+        max_changed_files: 10,
+        max_added_lines: 400,
+        budget_ceiling: { max_changed_files: 20, max_added_lines: 1600 },
+      },
+    });
+    expect(policy.change_limits?.budget_ceiling).toEqual({
+      max_changed_files: 20,
+      max_added_lines: 1600,
+    });
+  });
+
+  it.each([
+    ["max_changed_files", { max_changed_files: 9 }],
+    ["max_added_lines", { max_added_lines: 399 }],
+  ])("routine limitを下回る%sのbudget_ceilingを拒否する", (_axis, ceiling) => {
+    expect(() =>
+      parsePolicyValue({
+        change_limits: {
+          max_changed_files: 10,
+          max_added_lines: 400,
+          budget_ceiling: ceiling,
+        },
+      }),
+    ).toThrowError(PolicyError);
+  });
 });
 
 describe("parsePolicy", () => {

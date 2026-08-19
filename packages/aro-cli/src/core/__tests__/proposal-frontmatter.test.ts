@@ -51,6 +51,13 @@ const DECISION_EMPTY = `decision:
   by: ""
   reason: ""
 `;
+const DECISION_BUDGET_BOTH = `decision:
+  by: fooya
+  budget:
+    max_changed_files: 15
+    max_added_lines: 1200
+    reason: "schema・CLI・testsを同一revisionで整合させるため"
+`;
 
 describe("splitProposalFrontmatter", () => {
   it("frontmatterと本文を分離する", () => {
@@ -159,6 +166,53 @@ describe("parseProposalDocument", () => {
       parseProposalDocument(proposalDoc({ status, decision: DECISION_BY_ONLY })),
     ).not.toThrow();
   });
+
+  it.each(["accepted", "done"])("statusが%sなら両軸のbudgetをparseできる", (status) => {
+    const document = parseProposalDocument(
+      proposalDoc({ status, decision: DECISION_BUDGET_BOTH }),
+    );
+    expect(document.frontmatter.decision.budget).toEqual({
+      max_changed_files: 15,
+      max_added_lines: 1200,
+      reason: "schema・CLI・testsを同一revisionで整合させるため",
+    });
+  });
+
+  it("budgetは片軸でもparseできる", () => {
+    const document = parseProposalDocument(
+      proposalDoc({
+        status: "accepted",
+        decision: `decision:\n  by: fooya\n  budget:\n    max_added_lines: 1200\n    reason: "行数だけを承認"\n`,
+      }),
+    );
+    expect(document.frontmatter.decision.budget).toEqual({
+      max_added_lines: 1200,
+      reason: "行数だけを承認",
+    });
+  });
+
+  it.each([
+    ["empty", "    reason: \"理由\"\n"],
+    ["missing reason", "    max_changed_files: 15\n"],
+    ["blank reason", "    max_changed_files: 15\n    reason: \"   \"\n"],
+    ["unknown field", "    max_changed_files: 15\n    reason: \"理由\"\n    scope: all\n"],
+    ["negative files", "    max_changed_files: -1\n    reason: \"理由\"\n"],
+    ["fractional lines", "    max_added_lines: 1.5\n    reason: \"理由\"\n"],
+  ])("不正な%s budgetを拒否する", (_label, budgetBody) => {
+    const decision = `decision:\n  by: fooya\n  budget:\n${budgetBody}`;
+    expect(() => parseProposalDocument(proposalDoc({ status: "accepted", decision }))).toThrow(
+      /budget/u,
+    );
+  });
+
+  it.each(["open", "rejected", "superseded"])(
+    "statusが%sのbudgetを拒否する",
+    (status) => {
+      expect(() =>
+        parseProposalDocument(proposalDoc({ status, decision: DECISION_BUDGET_BOTH })),
+      ).toThrow(/budget/u);
+    },
+  );
 
   it("未知のstatusを拒否する", () => {
     expect(() => parseProposalDocument(proposalDoc({ status: "merged" }))).toThrow(/status/u);

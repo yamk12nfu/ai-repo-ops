@@ -20,9 +20,15 @@ import { PROJECT_YAML_PATH } from "./manifest.js";
 import type { GuardSeverity, Policy } from "./policy.js";
 import type { ProjectConfig } from "./project-config.js";
 import {
+  proposalBudgetTransitionViolationMessage,
   proposalTransitionViolationMessage,
   type ProposalTransition,
 } from "./proposal-decision.js";
+import {
+  parseProposalDocument,
+  type ProposalBudget as FrontmatterProposalBudget,
+} from "./proposal-frontmatter.js";
+import { FULL_GIT_SHA_RE } from "./knowledge-index.js";
 import {
   executionPlanTransitionFindings,
   type ExecutionPlanTransition,
@@ -76,10 +82,29 @@ export interface GuardSummary {
 export interface GuardReport {
   violations: GuardViolation[];
   summary: GuardSummary;
+  budget: GuardBudgetReport;
   /** 違反が 1 件でもあるか（severity を問わない）。 */
   hasViolations: boolean;
   /** severity=fail の違反があるか（exit code 判定に使う）。 */
   hasFailures: boolean;
+}
+
+export type GuardBudgetStatus = "not_applicable" | "applied" | "rejected";
+
+export interface GuardBudgetLimits {
+  max_changed_files?: number;
+  max_added_lines?: number;
+}
+
+type GuardBudgetProposal = { id: string; path: string } | null;
+
+export interface GuardBudgetReport {
+  status: GuardBudgetStatus;
+  reason: string;
+  proposal: GuardBudgetProposal;
+  requested: GuardBudgetLimits;
+  ceiling: GuardBudgetLimits;
+  applied: GuardBudgetLimits;
 }
 
 /** severity 付与前の違反（内部表現）。 */
@@ -113,6 +138,10 @@ export interface RunGuardInput {
   changedFiles: readonly GuardChangedFile[];
   projectConfig: ProjectConfig;
   policy: Policy;
+  /** `--base`へ渡された未解決の入力（full SHA認証境界に使う）。 */
+  baseInput?: string | undefined;
+  /** `baseInput`とのmerge-baseとして解決されたfull SHA。 */
+  mergeBaseSha?: string | undefined;
   /** authoritative な sync 結果と完全一致すると認証された path。 */
   trustedSyncPaths?: ReadonlySet<string> | undefined;
   /**
@@ -232,6 +261,122 @@ function checkFile(
   return violations;
 }
 
+function budgetLimits(maxChangedFiles: number | undefined, maxAddedLines: number | undefined): GuardBudgetLimits {
+  return {
+    ...(maxChangedFiles !== undefined ? { max_changed_files: maxChangedFiles } : {}),
+    ...(maxAddedLines !== undefined ? { max_added_lines: maxAddedLines } : {}),
+  };
+}
+
+function limitsFromBudget(budget: FrontmatterProposalBudget): GuardBudgetLimits {
+  return budgetLimits(budget.max_changed_files, budget.max_added_lines);
+}
+
+function baselineLimits(projectConfig: ProjectConfig, policy: Policy): GuardBudgetLimits {
+  const project = projectConfig.ai?.max_changed_files;
+  const policyMax = policy.change_limits?.max_changed_files;
+  const files = project === undefined ? policyMax : policyMax === undefined ? project : Math.min(project, policyMax);
+  return budgetLimits(files, policy.change_limits?.max_added_lines);
+}
+
+function ceilingLimits(policy: Policy): GuardBudgetLimits {
+  const ceiling = policy.change_limits?.budget_ceiling;
+  return budgetLimits(ceiling?.max_changed_files, ceiling?.max_added_lines);
+}
+
+function composeBudgetAxis(
+  requested: number | undefined,
+  baseline: number | undefined,
+  ceiling: number | undefined,
+): number | undefined {
+  if (requested === undefined) return baseline;
+  if (baseline === undefined) return ceiling === undefined ? requested : Math.min(requested, ceiling);
+  if (requested <= baseline) return requested;
+  return ceiling === undefined ? baseline : Math.min(requested, ceiling);
+}
+
+function composeBudgetLimits(
+  budget: FrontmatterProposalBudget,
+  baseline: GuardBudgetLimits,
+  ceiling: GuardBudgetLimits,
+): GuardBudgetLimits {
+  return budgetLimits(
+    composeBudgetAxis(budget.max_changed_files, baseline.max_changed_files, ceiling.max_changed_files),
+    composeBudgetAxis(budget.max_added_lines, baseline.max_added_lines, ceiling.max_added_lines),
+  );
+}
+
+interface StrictBudgetCandidate {
+  id: string;
+  path: string;
+  budget: FrontmatterProposalBudget | undefined;
+}
+
+function strictBudgetCandidate(transition: ProposalTransition): StrictBudgetCandidate | null {
+  if (typeof transition.baseText !== "string") return null;
+  try {
+    const document = parseProposalDocument(transition.baseText, transition.path);
+    return {
+      id: document.frontmatter.id,
+      path: transition.path,
+      budget: document.frontmatter.decision.budget,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function makeBudgetReport(
+  status: GuardBudgetStatus,
+  reason: string,
+  proposal: GuardBudgetProposal,
+  requested: GuardBudgetLimits,
+  ceiling: GuardBudgetLimits,
+  applied: GuardBudgetLimits,
+): GuardBudgetReport {
+  return { status, reason, proposal, requested, ceiling, applied };
+}
+
+function budgetReport(
+  input: Pick<RunGuardInput, "projectConfig" | "policy" | "proposalTransitions" | "baseInput" | "mergeBaseSha">,
+): GuardBudgetReport {
+  const baseline = baselineLimits(input.projectConfig, input.policy);
+  const ceiling = ceilingLimits(input.policy);
+  const transitions = input.proposalTransitions ?? [];
+  const candidates = transitions.filter((transition) => transition.base.kind === "proposal" && transition.base.status === "accepted" && transition.head.kind === "proposal" && transition.head.status === "done");
+  const onlyCandidate = candidates.length === 1 ? candidates[0] : undefined;
+  const candidate = onlyCandidate === undefined ? null : strictBudgetCandidate(onlyCandidate);
+  const proposal = candidate === null ? null : { id: candidate.id, path: candidate.path };
+  const requested = candidate?.budget === undefined ? {} : limitsFromBudget(candidate.budget);
+  const budgetDecisionViolation = transitions.some((transition) => proposalBudgetTransitionViolationMessage(transition) !== null);
+
+  if (budgetDecisionViolation) {
+    return makeBudgetReport("rejected", "proposal_decision contains a budget change or invalid budget", proposal, requested, ceiling, baseline);
+  }
+  if (candidates.length === 0) {
+    return makeBudgetReport("not_applicable", "no unique accepted -> done Proposal candidate", null, {}, ceiling, baseline);
+  }
+  if (candidates.length > 1) {
+    return makeBudgetReport("rejected", "multiple accepted -> done Proposal candidates", null, {}, ceiling, baseline);
+  }
+  if (candidate === null) {
+    return makeBudgetReport("rejected", "base Proposal frontmatter is invalid or unavailable for strict budget authentication", null, {}, ceiling, baseline);
+  }
+  if (candidate.budget === undefined) {
+    return makeBudgetReport("not_applicable", "unique Proposal has no decision.budget", proposal, {}, ceiling, baseline);
+  }
+  if (
+    input.baseInput === undefined ||
+    input.mergeBaseSha === undefined ||
+    !FULL_GIT_SHA_RE.test(input.baseInput) ||
+    input.baseInput !== input.mergeBaseSha
+  ) {
+    return makeBudgetReport("not_applicable", "budget requires --base to be the full SHA matching merge-base", proposal, requested, ceiling, baseline);
+  }
+
+  return makeBudgetReport("applied", "authenticated from the unique merge-base accepted Proposal", proposal, requested, ceiling, composeBudgetLimits(candidate.budget, baseline, ceiling));
+}
+
 /**
  * project.yaml と policy から読んだ制約を diff（変更ファイル一覧）に適用し、違反を判定する。
  *
@@ -258,6 +403,8 @@ export function runGuard(input: RunGuardInput): GuardReport {
     changedFiles,
     projectConfig,
     policy,
+    baseInput,
+    mergeBaseSha,
     trustedSyncPaths,
     proposalTransitions,
     executionPlanTransitions,
@@ -302,16 +449,15 @@ export function runGuard(input: RunGuardInput): GuardReport {
 
   const checkedFiles = changedFiles.length;
   const addedLines = changedFiles.reduce((sum, f) => sum + (f.addedLines ?? 0), 0);
+  const budget = budgetReport({
+    projectConfig,
+    policy,
+    proposalTransitions,
+    baseInput,
+    mergeBaseSha,
+  });
 
-  // 有効な max_changed_files: project.yaml と policy の両方にあれば、より厳しい上限を使う。
-  const projectMaxChangedFiles = projectConfig.ai?.max_changed_files;
-  const policyMaxChangedFiles = policy.change_limits?.max_changed_files;
-  const effectiveMaxChangedFiles =
-    projectMaxChangedFiles === undefined
-      ? policyMaxChangedFiles
-      : policyMaxChangedFiles === undefined
-        ? projectMaxChangedFiles
-        : Math.min(projectMaxChangedFiles, policyMaxChangedFiles);
+  const effectiveMaxChangedFiles = budget.applied.max_changed_files;
   if (effectiveMaxChangedFiles !== undefined && checkedFiles > effectiveMaxChangedFiles) {
     rawViolations.push({
       kind: "too_many_files",
@@ -321,8 +467,7 @@ export function runGuard(input: RunGuardInput): GuardReport {
     });
   }
 
-  // max_added_lines は policy のみ（project.yaml に対応するフィールドが無いため）。
-  const maxAddedLines = policy.change_limits?.max_added_lines;
+  const maxAddedLines = budget.applied.max_added_lines;
   if (maxAddedLines !== undefined && addedLines > maxAddedLines) {
     rawViolations.push({
       kind: "too_many_added_lines",
@@ -341,6 +486,7 @@ export function runGuard(input: RunGuardInput): GuardReport {
 
   return {
     violations,
+    budget,
     summary: {
       checkedFiles,
       addedLines,

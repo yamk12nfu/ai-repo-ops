@@ -34,7 +34,7 @@
 
 ## 前提
 
-- 対象 repo が `aro sync` で distribution 0.1.9 以降を導入済みであること
+- 対象 repo が `aro sync` で distribution 0.1.12 以降を導入済みであること
   （`.ai/managed/prompts/propose.md` と accepted 消化に対応した improve.md があり、
   `ai.allowed_paths` に `.ai/local/proposals/**` が含まれる。既存 repo は設定専用 PR を
   先に merge する）。
@@ -47,6 +47,9 @@
 
 - `status`: `open` / `accepted` / `rejected` / `done` / `superseded`
 - `decision.by`: `open` 以外では必須（判断した人間）。`decision.reason`: `rejected` / `superseded` で必須
+- `decision.budget`: 任意。`accepted` / `done` だけで許可し、`max_changed_files`（1以上）と
+  `max_added_lines`（0以上）の少なくとも一方、空白以外を含む `reason` が必要。unknown field、負値、
+  非整数、空budgetはstrict checkで拒否する
 - `sources[].path` + `proposed_at_commit`: 根拠。`open` / `accepted` の提案は source が変化すると
   `aro proposals check` が stale として検出する（`rejected` / `done` / `superseded` は判断が終わった
   履歴であり、stale 判定の対象外）
@@ -84,7 +87,17 @@ status: accepted        # または rejected
 decision:
   by: "<あなたの名前>"
   reason: "<rejected / superseded では必須。却下理由は次の提案の質になる>"
+  budget:                         # 大型実装を個別承認する場合だけ
+    max_changed_files: 15
+    max_added_lines: 1200
+    reason: "schema・CLI・tests・distributionを同一revisionで整合させるため"
 ```
+
+budgetを付けるかどうか、数値と理由を決めるのは人間である。repo共通のroutine上限は変更しない。
+`medium` のpolicy ceilingは20 files / 1600 lines、`low-risk` は40 files / 4000 lines、`high-risk` は
+baselineを超えるbudget緩和なしである。Proposal budgetを利用する実装側は、fetch済みdefault branchの
+exact full `BASE_SHA`を固定して `aro guard --base "$BASE_SHA"` を実行する。branch refでは候補を表示しても
+budgetは適用されない。
 
 **この PR は CI の `aro guard` が `proposal_decision`（severity: fail）で必ず落とす。**
 これは正常な動作である（採否の変更が人間の目を通らずに merge される経路を塞ぐため。
@@ -127,6 +140,8 @@ improve.md は `status: accepted` の提案から 1 件選ぶことを既定と�
 して同じ PR に含める（この遷移は guard の違反にならない）。実装を破棄した場合は `accepted` の
 まま据え置き、本文に破棄の記録を追記して、**記録だけの commit / PR として残す**
 （`status` が変わらないため通常どおり merge できる）。
+実装PRでbudgetを付与・変更・削除したり、理由だけを書き換えたりしてはならない。同じbudgetを保持した
+`accepted → done`だけが正常で、他は `proposal_decision` violationとして人間の確認を要求する。
 
 ### 4. CI の検証
 
@@ -144,6 +159,8 @@ improve.md は `status: accepted` の提案から 1 件選ぶことを既定と�
 | （なし）→ `open` 以外 | — | **fail**（採否検証の迂回経路を塞ぐ） |
 | `open` → `accepted` / `rejected`、任意 → `superseded` | 人間のみ | **fail**（人間が override して merge） |
 | `accepted` → `done` | AI（improve.md）または人間 | 違反にしない |
+| `accepted` → `done` でbudgetを保持 | 人間が事前承認、AIが保持 | 違反にしない。full SHA一致時だけ数値budgetを適用 |
+| budgetの付与・変更・削除・parse不能、新規Proposalへの混入 | — | **fail**（既存の `proposal_decision` に統合） |
 | status を変えない編集（破棄の記録の追記等） | — | 違反にしない |
 | 提案ファイルの削除 | 人間のみ | **fail**（提案は消さず status で閉じる） |
 

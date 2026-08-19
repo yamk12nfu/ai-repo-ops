@@ -9,6 +9,9 @@ description: medium リスク向けの標準ポリシー。安全側に倒しつ
 change_limits:
   max_changed_files: 10
   max_added_lines: 400
+  budget_ceiling:
+    max_changed_files: 20
+    max_added_lines: 1600
 
 # violation ごとの扱い。fail は required check を落とし、warn は報告のみ行う。
 # 表に無い kind は fail 扱い。
