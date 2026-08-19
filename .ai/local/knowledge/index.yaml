@@ -1,6 +1,12 @@
 # yaml-language-server: $schema=../../managed/schemas/knowledge.schema.json
 schema_version: 1
 entries:
+  - id: knowledge-check-guard-ordering
+    document: knowledge-check-guard-ordering.md
+    verified_at_commit: 5dafc499ecd757f75196f51869f33cf5aeb52775
+    sources:
+      - path: docs/repo-knowledge-loop.md
+      - path: README.md
   - id: operating-model
     document: operating-model.md
     verified_at_commit: 3b089d56486755da63edb0367b77e478cc4188c6

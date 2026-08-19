@@ -1,7 +1,7 @@
 ---
 schema_version: 1
 id: knowledge-check-guard-ordering
-status: accepted
+status: done
 decision:
   by: yamk12nfu
 proposed_at_commit: dacda46b96c2dcdaef51d99528e238b2dde9d2a9
