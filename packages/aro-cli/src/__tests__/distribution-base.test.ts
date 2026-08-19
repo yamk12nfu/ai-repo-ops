@@ -41,6 +41,8 @@ const MANAGED_SCHEMA_COPY = path.join(
   "schemas",
   "project.schema.json",
 );
+const AUTHORITATIVE_PROPOSAL_SCHEMA = path.join(REPO_ROOT, "schemas", "proposal.schema.json");
+const MANAGED_PROPOSAL_SCHEMA_COPY = path.join(REPO_ROOT, "distribution", "base", "files", ".ai", "managed", "schemas", "proposal.schema.json");
 const AUTHORITATIVE_KNOWLEDGE_SCHEMA = path.join(REPO_ROOT, "schemas", "knowledge.schema.json");
 const MANAGED_KNOWLEDGE_SCHEMA_COPY = path.join(
   REPO_ROOT,
@@ -110,6 +112,7 @@ const DISTRIBUTED_REVIEW_WORKFLOW = path.join(
 );
 const REUSABLE_REVIEW_WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "ai-review.reusable.yml");
 const CI_WORKFLOW = path.join(REPO_ROOT, ".github", "workflows", "ci.yml");
+const DISTRIBUTED_POLICY_ROOT = path.join(REPO_ROOT, "distribution", "base", "files", ".ai", "managed", "policies");
 
 // ---------------------------------------------------------------------------
 // 最小 JSON Schema バリデータ（オフライン・依存追加なし）。
@@ -290,6 +293,61 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(canonicalizeTextString(managed)).toBe(canonicalizeTextString(authoritative));
   });
 
+  it("proposal schemaのbudget構造とstatus条件を定義する", async () => {
+    const schema = JSON.parse(await readFile(AUTHORITATIVE_PROPOSAL_SCHEMA, "utf8")) as Record<string, unknown>;
+    const properties = schema["properties"] as Record<string, unknown>;
+    const decision = properties["decision"] as Record<string, unknown>;
+    const decisionProperties = decision["properties"] as Record<string, unknown>;
+    const budget = decisionProperties["budget"] as Record<string, unknown>;
+    const budgetProperties = budget["properties"] as Record<string, unknown>;
+
+    expect(budget["type"]).toBe("object");
+    expect(budget["required"]).toEqual(["reason"]);
+    expect(budget["additionalProperties"]).toBe(false);
+    expect(budgetProperties["max_changed_files"]).toMatchObject({ type: "integer", minimum: 1 });
+    expect(budgetProperties["max_added_lines"]).toMatchObject({ type: "integer", minimum: 0 });
+    expect(budgetProperties["reason"]).toMatchObject({ type: "string", minLength: 1, pattern: "\\S" });
+    expect(budget["anyOf"]).toEqual([
+      { required: ["max_changed_files"] },
+      { required: ["max_added_lines"] },
+    ]);
+
+    const budgetStatusRule = (schema["allOf"] as Record<string, unknown>[]).find((rule) => {
+      const condition = rule["if"] as Record<string, unknown> | undefined;
+      const conditionProperties = condition?.["properties"] as Record<string, unknown> | undefined;
+      const conditionDecision = conditionProperties?.["decision"] as Record<string, unknown> | undefined;
+      return conditionDecision?.["required"]?.toString() === "budget";
+    });
+    expect(budgetStatusRule?.["then"]).toMatchObject({
+      properties: { status: { enum: ["accepted", "done"] } },
+    });
+  });
+
+  it("proposal managed schema copy が authoritative schema とバイト一致する", async () => {
+    const [authoritative, managed] = await Promise.all([
+      readFile(AUTHORITATIVE_PROPOSAL_SCHEMA, "utf8"),
+      readFile(MANAGED_PROPOSAL_SCHEMA_COPY, "utf8"),
+    ]);
+    expect(managed).toBe(authoritative);
+  });
+
+  it("distributed policyがmedium/low-riskのbudget ceilingとhigh-risk無緩和を定義する", async () => {
+    const [medium, lowRisk, highRisk] = await Promise.all(
+      ["default.yaml", "low-risk.yaml", "security.yaml"].map(async (file) =>
+        parseYaml(await readFile(path.join(DISTRIBUTED_POLICY_ROOT, file), "utf8")),
+      ),
+    );
+    expect((medium as { change_limits: { budget_ceiling: unknown } }).change_limits.budget_ceiling).toEqual({
+      max_changed_files: 20,
+      max_added_lines: 1600,
+    });
+    expect((lowRisk as { change_limits: { budget_ceiling: unknown } }).change_limits.budget_ceiling).toEqual({
+      max_changed_files: 40,
+      max_added_lines: 4000,
+    });
+    expect((highRisk as { change_limits?: { budget_ceiling?: unknown } }).change_limits?.budget_ceiling).toBeUndefined();
+  });
+
   it("managed knowledge schema copy が authoritative schema と一致する", async () => {
     const [authoritative, managed] = await Promise.all([
       readFile(AUTHORITATIVE_KNOWLEDGE_SCHEMA, "utf8"),
@@ -312,6 +370,14 @@ describe("distribution/base（Phase 3 完了条件）", () => {
       "`ai.max_changed_files` と適用 policy の `change_limits.max_changed_files`",
     );
     expect(prompt).toContain("小さい方");
+  });
+
+  it("improve promptがbudget利用時のfull BASE_SHA固定とbranch ref不適用を案内する", async () => {
+    const prompt = await readFile(IMPROVE_PROMPT, "utf8");
+    expect(prompt).toContain("full `BASE_SHA`");
+    expect(prompt).toContain("branch ref");
+    expect(prompt).toContain("budget");
+    expect(prompt).toContain("default branch");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
@@ -485,9 +551,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("scheduled local contractをdistribution 0.1.11として配布する", async () => {
+  it("proposal budget contractをdistribution 0.1.12として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.1.11");
+    expect(loaded.manifest.version).toBe("0.1.12");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {

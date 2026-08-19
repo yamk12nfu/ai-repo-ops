@@ -10,7 +10,7 @@ import {
 import type { ProposalStatus } from "../proposal-frontmatter.js";
 
 /** 有効な frontmatter を持つ proposal テキストを作る。 */
-function proposalText(status: string): string {
+function proposalText(status: string, decision = ""): string {
   return [
     "---",
     "schema_version: 1",
@@ -19,12 +19,32 @@ function proposalText(status: string): string {
     "proposed_at_commit: 0123456789abcdef0123456789abcdef01234567",
     "sources:",
     "  - path: src/index.ts",
+    decision,
     "---",
     "",
     "## 課題",
     "本文",
     "",
   ].join("\n");
+}
+
+const BUDGET_DECISION = [
+  "decision:",
+  "  by: fooya",
+  "  budget:",
+  "    max_changed_files: 15",
+  "    max_added_lines: 1200",
+  "    reason: schemaとguardを同一revisionで整合させるため",
+].join("\n");
+
+function textMessage(base: string, head: string): string | null {
+  return proposalTransitionViolationMessage({
+    path: ".ai/local/proposals/2026-08-sample.md",
+    base: { kind: "proposal", status: "accepted" },
+    head: { kind: "proposal", status: "done" },
+    baseText: base,
+    headText: head,
+  });
 }
 
 function proposal(status: ProposalStatus): ProposalFileState {
@@ -93,6 +113,46 @@ describe("proposalTransitionViolationMessage: 違反にしない遷移", () => {
     for (const status of ["open", "accepted", "rejected", "done", "superseded"] as const) {
       expect(messageFor(proposal(status), proposal(status))).toBeNull();
     }
+  });
+
+  it("accepted → doneで同じbudgetを保持する実装PRは違反にしない", () => {
+    const text = proposalText("accepted", BUDGET_DECISION);
+    const head = proposalText("done", BUDGET_DECISION);
+    expect(textMessage(text, head)).toBeNull();
+  });
+});
+
+describe("proposalTransitionViolationMessage: budgetの人間判断保護", () => {
+  it.each([
+    ["付与", proposalText("accepted", "decision:\n  by: fooya"), proposalText("done", BUDGET_DECISION)],
+    ["変更", proposalText("accepted", BUDGET_DECISION), proposalText("done", BUDGET_DECISION.replace("1200", "1201"))],
+    ["削除", proposalText("accepted", BUDGET_DECISION), proposalText("done", "decision:\n  by: fooya")],
+  ])("accepted → doneのbudget%sはproposal_decision違反", (_label, base, head) => {
+    const message = textMessage(base, head);
+    expect(message).not.toBeNull();
+    expect(message).toContain("budget");
+  });
+
+  it("新規open Proposalへのbudget混入はstatus遷移が正常でも違反", () => {
+    const message = proposalTransitionViolationMessage({
+      path: ".ai/local/proposals/2026-08-new.md",
+      base: { kind: "absent" },
+      head: { kind: "proposal", status: "open" },
+      baseText: null,
+      headText: proposalText("open", BUDGET_DECISION),
+    });
+    expect(message).not.toBeNull();
+    expect(message).toContain("budget");
+  });
+
+  it("baseとHEADが同じ不正budgetでも違反にする", () => {
+    const invalid = proposalText(
+      "accepted",
+      BUDGET_DECISION.replace("max_changed_files: 15", "max_changed_files: 0"),
+    );
+    const message = textMessage(invalid, invalid);
+    expect(message).not.toBeNull();
+    expect(message).toContain("budget");
   });
 });
 

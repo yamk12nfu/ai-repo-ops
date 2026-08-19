@@ -18,7 +18,7 @@ import {
   TEMPLATE_REL,
   writeRaw,
 } from "../../test-support/distribution.fixture.js";
-import { gitCheckoutNewBranch, gitCommitAll, initRealGitRepo } from "../../test-support/git.fixture.js";
+import { gitCheckoutNewBranch, gitCommitAll, gitRevParse, initRealGitRepo } from "../../test-support/git.fixture.js";
 import {
   createSyncAuthenticationFixture,
   SYNC_FIXTURE_POLICY_DEFAULT as POLICY_DEFAULT,
@@ -838,16 +838,19 @@ evals: {}
    * proposal テスト用 policy。SYNC_FIXTURE_POLICY_DEFAULT は `max_added_lines: 5` で、
    * frontmatter を持つ提案ファイルの追加だけで超過してしまうため、配布 policy 相当の上限にする。
    */
-  const PROPOSALS_POLICY = `schema_version: 1
+const PROPOSALS_POLICY = `schema_version: 1
 name: default
 change_limits:
   max_changed_files: 10
   max_added_lines: 400
+  budget_ceiling:
+    max_changed_files: 20
+    max_added_lines: 1600
 forbidden_paths:
   - "secrets/**"
 `;
 
-  function proposalText(status: string, body = "## 課題\n本文\n"): string {
+  function proposalText(status: string, body = "## 課題\n本文\n", budget = ""): string {
     return [
       "---",
       "schema_version: 1",
@@ -856,6 +859,9 @@ forbidden_paths:
       "proposed_at_commit: 0123456789abcdef0123456789abcdef01234567",
       "sources:",
       "  - path: src/index.ts",
+      "decision:",
+      "  by: fooya",
+      ...(budget.length > 0 ? ["  budget:", ...budget.split("\n").map((line) => `    ${line}`)] : []),
       "---",
       "",
       body,
@@ -866,6 +872,24 @@ forbidden_paths:
     await writeRaw(repoRoot, ".ai/project.yaml", PROPOSALS_PROJECT_YAML);
     await writeRaw(repoRoot, ".ai/managed/policies/default.yaml", PROPOSALS_POLICY);
     await gitCommitAll(repoRoot, "chore: init project config and policy");
+  }
+
+  async function setupBudgetScenario(
+    baseBudget: string,
+    headBudget: string,
+    extraFiles = 0,
+    extraPrefix = "budget",
+  ): Promise<string> {
+    await setupProposalsRepo();
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("accepted", "## 課題\n承認済み\n", baseBudget));
+    await gitCommitAll(repoRoot, "docs(proposals): accept scoped budget");
+    await gitCheckoutNewBranch(repoRoot, "feature");
+    await writeRaw(repoRoot, PROPOSAL_REL, proposalText("done", "## 課題\n実装済み\n", headBudget));
+    for (let index = 0; index < extraFiles; index += 1) {
+      await writeRaw(repoRoot, `src/${extraPrefix}-${index}.ts`, `export const value${index} = ${index};\n`);
+    }
+    await gitCommitAll(repoRoot, "feat: implement scoped budget proposal");
+    return gitRevParse(repoRoot, "main");
   }
 
   it("status: open の新規提案は違反にならない（propose PR がノイズで落ちない）", async () => {
@@ -998,5 +1022,79 @@ forbidden_paths:
     expect(violation).toBeDefined();
     expect(violation?.path).toBe(PROPOSAL_REL);
     expect(violation?.severity).toBe("fail");
+  });
+
+  it("full BASE_SHAの人間承認budgetを実git diffへ適用し、root/reportへ出力する", async () => {
+    const budget = "max_changed_files: 8\nmax_added_lines: 1600\nreason: schemaとguardを同一PRで整合";
+    const baseSha = await setupBudgetScenario(budget, budget, 6, "scoped");
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: baseSha, json: true }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+
+    const parsed = JSON.parse(cap.out()) as {
+      base: string;
+      mergeBaseSha: string;
+      budget: { status: string; proposal: { id: string; path: string }; applied: { max_changed_files: number } };
+      report: { budget: { status: string; applied: { max_changed_files: number } }; violations: unknown[] };
+    };
+    expect(parsed.base).toBe(baseSha);
+    expect(parsed.mergeBaseSha).toBe(baseSha);
+    expect(parsed.budget).toMatchObject({
+      status: "applied",
+      proposal: { id: "sample-proposal", path: PROPOSAL_REL },
+      applied: { max_changed_files: 8 },
+    });
+    expect(parsed.report.budget).toEqual(parsed.budget);
+    expect(parsed.report.violations).toEqual([]);
+  });
+
+  it("baseにbudgetが無くHEADで自己増額してdone化した場合はproposal_decisionとbaseline超過を同時に返す", async () => {
+    const baseSha = await setupBudgetScenario("", "max_changed_files: 20\nreason: self increase", 5, "over-limit");
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: baseSha, json: true }), cap.io);
+    expect(code).toBe(GUARD_EXIT.violations);
+
+    const parsed = JSON.parse(cap.out()) as {
+      budget: { status: string; applied: { max_changed_files: number } };
+      report: { violations: Array<{ kind: string; limit?: number }> };
+    };
+    expect(parsed.budget).toMatchObject({ status: "rejected", applied: { max_changed_files: 5 } });
+    expect(parsed.report.violations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "proposal_decision" }),
+        expect.objectContaining({ kind: "too_many_files", limit: 5 }),
+      ]),
+    );
+  });
+
+  it("branch refでguardを呼ぶと一意なcandidateは表示するがbudgetは適用しない", async () => {
+    const budget = "max_changed_files: 8\nreason: branch ref test";
+    await setupBudgetScenario(budget, budget);
+
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: "main", json: true }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+
+    const parsed = JSON.parse(cap.out()) as {
+      budget: { status: string; reason: string; proposal: { id: string; path: string }; applied: { max_changed_files: number } };
+    };
+    expect(parsed.budget).toMatchObject({
+      status: "not_applicable",
+      reason: expect.stringContaining("full SHA"),
+      proposal: { id: "sample-proposal", path: PROPOSAL_REL },
+      applied: { max_changed_files: 5 },
+    });
+  });
+
+  it("human出力に一意なProposalのBudget要約を1行で表示する", async () => {
+    const budget = "max_changed_files: 8\nreason: human output";
+    const baseSha = await setupBudgetScenario(budget, budget);
+    const cap = captureIo();
+    const code = await executeGuard(options({ base: baseSha }), cap.io);
+    expect(code).toBe(GUARD_EXIT.ok);
+    const budgetLines = cap.out().split("\n").filter((line) => line.startsWith("Budget:"));
+    expect(budgetLines).toHaveLength(1);
+    expect(budgetLines[0]).toContain(PROPOSAL_REL);
+    expect(budgetLines[0]).toContain("applied");
   });
 });

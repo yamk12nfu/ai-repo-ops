@@ -30,6 +30,7 @@ function policy(
   input: {
     maxChangedFiles?: number;
     maxAddedLines?: number;
+    budgetCeiling?: { maxChangedFiles?: number; maxAddedLines?: number };
     forbiddenPaths?: string[];
     severity?: Record<string, "fail" | "warn">;
   } = {},
@@ -40,6 +41,18 @@ function policy(
     change_limits: {
       ...(input.maxChangedFiles !== undefined ? { max_changed_files: input.maxChangedFiles } : {}),
       ...(input.maxAddedLines !== undefined ? { max_added_lines: input.maxAddedLines } : {}),
+      ...(input.budgetCeiling !== undefined
+        ? {
+            budget_ceiling: {
+              ...(input.budgetCeiling.maxChangedFiles !== undefined
+                ? { max_changed_files: input.budgetCeiling.maxChangedFiles }
+                : {}),
+              ...(input.budgetCeiling.maxAddedLines !== undefined
+                ? { max_added_lines: input.budgetCeiling.maxAddedLines }
+                : {}),
+            },
+          }
+        : {}),
     },
     ...(input.forbiddenPaths !== undefined ? { forbidden_paths: input.forbiddenPaths } : {}),
     ...(input.severity !== undefined ? { severity: input.severity } : {}),
@@ -49,6 +62,69 @@ function policy(
 /** テスト用 changed file を作る。 */
 function file(path: string, addedLines: number | null = 1, deletedLines: number | null = 0): GuardChangedFile {
   return { path, addedLines, deletedLines };
+}
+
+const MERGE_BASE_SHA = "0123456789abcdef0123456789abcdef01234567";
+const PROPOSAL_PATH = ".ai/local/proposals/2026-08-scoped-budget.md";
+
+function proposalText(
+  status: "accepted" | "done" | "open",
+  budget: string | null = null,
+): string {
+  return [
+    "---",
+    "schema_version: 1",
+    "id: scoped-budget",
+    `status: ${status}`,
+    "proposed_at_commit: 0123456789abcdef0123456789abcdef01234567",
+    "sources:",
+    "  - path: src/index.ts",
+    "decision:",
+    "  by: fooya",
+    ...(budget === null ? [] : ["  budget:", ...budget.split("\n").map((line) => `    ${line}`)]),
+    "---",
+    "",
+    "本文",
+    "",
+  ].join("\n");
+}
+
+function proposalTransition(
+  baseText: string,
+  headText: string,
+  path = PROPOSAL_PATH,
+): NonNullable<Parameters<typeof runGuard>[0]["proposalTransitions"]> {
+  return [
+    {
+      path,
+      base: { kind: "proposal", status: "accepted" },
+      head: { kind: "proposal", status: "done" },
+      baseText,
+      headText,
+    },
+  ];
+}
+
+function runBudget(input: {
+  changedFiles: GuardChangedFile[];
+  proposalTransitions?: NonNullable<Parameters<typeof runGuard>[0]["proposalTransitions"]>;
+  budget?: string;
+  headBudget?: string;
+  projectConfig?: ProjectConfig;
+  policy?: Policy;
+  baseInput?: string;
+}) {
+  return runGuard({
+    changedFiles: input.changedFiles,
+    projectConfig: input.projectConfig ?? projectConfig({ maxChangedFiles: 2 }),
+    policy: input.policy ?? policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+    baseInput: input.baseInput ?? MERGE_BASE_SHA,
+    mergeBaseSha: MERGE_BASE_SHA,
+    proposalTransitions: input.proposalTransitions ?? proposalTransition(
+      proposalText("accepted", input.budget || null),
+      proposalText("done", (input.headBudget ?? input.budget) || null),
+    ),
+  });
 }
 
 describe("runGuard: forbidden_paths", () => {
@@ -312,6 +388,174 @@ describe("runGuard: change_limits（追加行数）", () => {
       policy: policy(),
     });
     expect(report.violations).toEqual([]);
+  });
+});
+
+describe("runGuard: proposal-scoped change budget", () => {
+  it("full SHAで一意な有効budgetをceiling内へ合成し、実効limitをviolationへ出す", () => {
+    const report = runBudget({
+      changedFiles: Array.from({ length: 5 }, (_, index) => file(`src/file-${index}.ts`, 5)),
+      policy: policy({
+        maxChangedFiles: 3,
+        maxAddedLines: 10,
+        budgetCeiling: { maxChangedFiles: 4, maxAddedLines: 20 },
+      }),
+      budget: "max_changed_files: 5\nmax_added_lines: 30\nreason: approved",
+    });
+
+    expect(report.budget).toMatchObject({ status: "applied", proposal: { id: "scoped-budget", path: PROPOSAL_PATH }, requested: { max_changed_files: 5, max_added_lines: 30 }, ceiling: { max_changed_files: 4, max_added_lines: 20 }, applied: { max_changed_files: 4, max_added_lines: 20 } });
+    expect(report.violations).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "too_many_files", limit: 4, actual: 5 }), expect.objectContaining({ kind: "too_many_added_lines", limit: 20, actual: 25 })]));
+  });
+
+  it("ceilingなしでもbaseline以下の厳しいbudgetを軸ごとに適用する", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts", 3), file("src/b.ts", 3)],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      budget: "max_changed_files: 1\nmax_added_lines: 5\nreason: stricter",
+    });
+
+    expect(report.budget).toMatchObject({ status: "applied", applied: { max_changed_files: 1, max_added_lines: 5 } });
+    expect(report.violations).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "too_many_files", limit: 1 }), expect.objectContaining({ kind: "too_many_added_lines", limit: 5 })]));
+  });
+
+  it("ceilingがない緩和軸はbaselineへ戻し、指定された厳格軸は適用する", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts", 5), file("src/b.ts", 5)],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      budget: "max_changed_files: 4\nmax_added_lines: 5\nreason: mixed",
+    });
+
+    expect(report.budget.applied).toEqual({ max_changed_files: 2, max_added_lines: 5 });
+    expect(report.violations).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "too_many_added_lines", limit: 5 })]));
+    expect(report.violations.filter((violation) => violation.kind === "too_many_files")).toEqual([]);
+  });
+
+  it("base入力がfull SHAでmerge-baseと一致しない場合はbudgetを適用しない", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts", 1), file("src/b.ts", 1), file("src/c.ts", 1)],
+      policy: policy({ maxChangedFiles: 3, maxAddedLines: 10, budgetCeiling: { maxChangedFiles: 4 } }),
+      baseInput: "fedcba9876543210fedcba9876543210fedcba98",
+      budget: "max_changed_files: 4\nreason: approved",
+    });
+
+    expect(report.budget).toMatchObject({ status: "not_applicable", proposal: { id: "scoped-budget", path: PROPOSAL_PATH }, applied: { max_changed_files: 2, max_added_lines: 10 } });
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2 }));
+  });
+
+  it("accepted → done候補が0件ならbudgetはnot_applicableでproposalをnullにし、baselineを使う", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      proposalTransitions: [],
+    });
+
+    expect(report.budget).toEqual({
+      status: "not_applicable",
+      reason: "no unique accepted -> done Proposal candidate",
+      proposal: null,
+      requested: {},
+      ceiling: {},
+      applied: { max_changed_files: 2, max_added_lines: 10 },
+    });
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2, actual: 3 }));
+  });
+
+  it("accepted → done候補のbase Proposal frontmatterがschema-invalidならbudgetを拒否し、baselineを使う", () => {
+    const baseText = proposalText("accepted").replace("schema_version: 1", "schema_version: 2");
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      proposalTransitions: proposalTransition(baseText, proposalText("done")),
+    });
+
+    expect(report.budget).toEqual({
+      status: "rejected",
+      reason: "base Proposal frontmatter is invalid or unavailable for strict budget authentication",
+      proposal: null,
+      requested: {},
+      ceiling: {},
+      applied: { max_changed_files: 2, max_added_lines: 10 },
+    });
+    expect(report.violations).not.toContainEqual(expect.objectContaining({ kind: "proposal_decision" }));
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2, actual: 3 }));
+  });
+
+  it("accepted → done候補のbaseでdecision.byが空ならbudgetを拒否し、baselineを使う", () => {
+    // base/HEADのraw budgetはどちらも不在のまま、HEADだけを有効なdoneにする。
+    const baseText = proposalText("accepted").replace("  by: fooya", '  by: ""');
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+      proposalTransitions: proposalTransition(baseText, proposalText("done")),
+    });
+
+    expect(report.budget).toEqual({
+      status: "rejected",
+      reason: "base Proposal frontmatter is invalid or unavailable for strict budget authentication",
+      proposal: null,
+      requested: {},
+      ceiling: {},
+      applied: { max_changed_files: 2, max_added_lines: 10 },
+    });
+    expect(report.violations).not.toContainEqual(expect.objectContaining({ kind: "proposal_decision" }));
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2, actual: 3 }));
+  });
+
+  it("budgetなしの一意なaccepted → done候補はid/pathだけを返しbaselineを使う", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts")],
+      policy: policy({ maxChangedFiles: 5, maxAddedLines: 10 }),
+    });
+
+    expect(report.budget).toMatchObject({ status: "not_applicable", proposal: { id: "scoped-budget", path: PROPOSAL_PATH }, applied: { max_changed_files: 2, max_added_lines: 10 } });
+  });
+
+  it("複数のaccepted → done候補はbudgetを拒否しproposalをnullにする", () => {
+    const first = proposalTransition(
+      proposalText("accepted", "max_changed_files: 4\nreason: first"),
+      proposalText("done", "max_changed_files: 4\nreason: first"),
+    );
+    const second = proposalTransition(
+      proposalText("accepted", "max_changed_files: 4\nreason: second"),
+      proposalText("done", "max_changed_files: 4\nreason: second"),
+      ".ai/local/proposals/2026-08-other.md",
+    );
+    const report = runBudget({
+      changedFiles: [file("src/a.ts")],
+      policy: policy({ maxChangedFiles: 3, maxAddedLines: 10, budgetCeiling: { maxChangedFiles: 4 } }),
+      proposalTransitions: [...first, ...second],
+    });
+
+    expect(report.budget).toMatchObject({ status: "rejected", proposal: null, applied: { max_changed_files: 2 } });
+  });
+
+  it("budget変更を含むproposal_decisionでは既定limitへfail closedする", () => {
+    const report = runBudget({
+      changedFiles: [file("src/a.ts"), file("src/b.ts"), file("src/c.ts")],
+      policy: policy({ maxChangedFiles: 3, maxAddedLines: 10, budgetCeiling: { maxChangedFiles: 4 } }),
+      budget: "max_changed_files: 4\nreason: before",
+      headBudget: "max_changed_files: 5\nreason: after",
+    });
+
+    expect(report.budget).toMatchObject({ status: "rejected", proposal: { id: "scoped-budget", path: PROPOSAL_PATH }, applied: { max_changed_files: 2, max_added_lines: 10 } });
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "proposal_decision", path: PROPOSAL_PATH }));
+    expect(report.violations).toContainEqual(expect.objectContaining({ kind: "too_many_files", limit: 2 }));
+  });
+
+  it("budgetはpath・managed・workflow・project configの境界を緩和しない", () => {
+    const report = runBudget({
+      changedFiles: [
+        file(".env"),
+        file(".ai/managed/prompts/review.md"),
+        file(".github/workflows/ci.yml"),
+        file(".ai/project.yaml"),
+      ],
+      projectConfig: projectConfig({ maxChangedFiles: 1, allowedPaths: ["**"] }),
+      policy: policy({ maxChangedFiles: 1, maxAddedLines: 1, budgetCeiling: { maxChangedFiles: 10, maxAddedLines: 10 }, forbiddenPaths: [".env"] }),
+      budget: "max_changed_files: 10\nmax_added_lines: 10\nreason: boundaries",
+    });
+
+    expect(report.violations.map((violation) => violation.kind).sort()).toEqual(["forbidden_path", "managed_file", "project_config", "workflow"]);
   });
 });
 

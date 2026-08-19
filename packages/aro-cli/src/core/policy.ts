@@ -25,13 +25,47 @@ import { PolicyError } from "./errors.js";
 import type { RiskLevel } from "./project-config.js";
 import { parseYaml } from "./yaml.js";
 
+const budgetCeilingSchema = z
+  .object({
+    max_changed_files: z.number().int().min(1).optional(),
+    max_added_lines: z.number().int().min(0).optional(),
+  })
+  .strict();
+
 /** `change_limits` セクション。すべて optional（未設定なら guard 側で「制限なし」として扱う）。 */
 const changeLimitsSchema = z
   .object({
     max_changed_files: z.number().int().min(1).optional(),
     max_added_lines: z.number().int().min(0).optional(),
+    budget_ceiling: budgetCeilingSchema.optional(),
   })
-  .passthrough();
+  .passthrough()
+  .superRefine((limits, ctx) => {
+    const ceiling = limits.budget_ceiling;
+    if (ceiling === undefined) return;
+    if (
+      limits.max_changed_files !== undefined &&
+      ceiling.max_changed_files !== undefined &&
+      ceiling.max_changed_files < limits.max_changed_files
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["budget_ceiling", "max_changed_files"],
+        message: "budget_ceiling.max_changed_filesはroutine limit以上である必要があります。",
+      });
+    }
+    if (
+      limits.max_added_lines !== undefined &&
+      ceiling.max_added_lines !== undefined &&
+      ceiling.max_added_lines < limits.max_added_lines
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["budget_ceiling", "max_added_lines"],
+        message: "budget_ceiling.max_added_linesはroutine limit以上である必要があります。",
+      });
+    }
+  });
 
 /**
  * violation 1 件の扱い。`fail` は required check を落とし、`warn` は報告のみ行う。
@@ -105,7 +139,7 @@ export function parsePolicyValue(value: unknown, sourceRef?: string): Policy {
     throw new PolicyError(
       "POLICY_INVALID",
       `${where}policy の検証に失敗しました（guard に必要な change_limits.* / forbidden_paths の schema）:\n${formatZodIssues(result.error.issues)}`,
-      { hint: "change_limits.max_changed_files / change_limits.max_added_lines / forbidden_paths を確認してください。", cause: result.error },
+      { hint: "change_limits.max_changed_files / change_limits.max_added_lines / change_limits.budget_ceiling / forbidden_paths を確認してください。", cause: result.error },
     );
   }
   return result.data;

@@ -4,7 +4,7 @@
  * {@link GuardReport} を違反一覧（無ければ OK）と Summary へ整形する。doctor-format.ts と同様、
  * 色付けは diff-format.ts の {@link Palette} を再利用する（違反=conflict(赤) / 違反なし=add(緑)）。
  */
-import type { GuardReport, GuardViolation } from "../core/guard.js";
+import type { GuardBudgetLimits, GuardReport, GuardViolation } from "../core/guard.js";
 import type { SyncAuthenticationReport } from "../core/sync-authentication.js";
 import { paletteFor, type Palette } from "./diff-format.js";
 
@@ -30,6 +30,24 @@ function formatViolation(violation: GuardViolation, p: Palette): string[] {
   return lines;
 }
 
+function formatBudgetLimits(limits: GuardBudgetLimits): string {
+  return `files=${limits.max_changed_files ?? "unlimited"} lines=${limits.max_added_lines ?? "unlimited"}`;
+}
+
+function formatBudgetSummary(report: GuardReport): string {
+  const proposal = report.budget.proposal
+    ? `${report.budget.proposal.id} (${report.budget.proposal.path})`
+    : "none";
+  return [
+    `Budget: ${report.budget.status}`,
+    `proposal=${proposal}`,
+    `reason=${report.budget.reason}`,
+    `requested=${formatBudgetLimits(report.budget.requested)}`,
+    `ceiling=${formatBudgetLimits(report.budget.ceiling)}`,
+    `applied=${formatBudgetLimits(report.budget.applied)}`,
+  ].join(" ");
+}
+
 /**
  * {@link GuardReport} を人間向けテキストへ整形する（末尾改行なし。呼び出し側で付与する）。
  */
@@ -40,6 +58,7 @@ export function formatGuardHuman(report: GuardReport, options: FormatGuardOption
   lines.push(p.heading("ai-repo-ops guard"));
   lines.push("");
   lines.push(`Base: ${options.base}`);
+  lines.push(formatBudgetSummary(report));
   lines.push("");
 
   if (options.trustedSync?.status === "authenticated") {
