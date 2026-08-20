@@ -3,12 +3,24 @@ schema_version: 1
 entries:
   - id: knowledge-check-guard-ordering
     document: knowledge-check-guard-ordering.md
-    verified_at_commit: 5dafc499ecd757f75196f51869f33cf5aeb52775
+    verified_at_commit: 3a26046d991638b90bfe9de4c460fe46067630dc
     sources:
       - path: docs/repo-knowledge-loop.md
-      - path: README.md
+      - path: docs/guard.md
   - id: operating-model
     document: operating-model.md
-    verified_at_commit: 3b089d56486755da63edb0367b77e478cc4188c6
+    verified_at_commit: 3a26046d991638b90bfe9de4c460fe46067630dc
     sources:
-      - path: README.md
+      - path: docs/local-improve-loop.md
+      - path: docs/proposal-loop.md
+      - path: docs/guard.md
+      - path: docs/plans/07-execution-plan-protocol.md
+      - path: docs/repo-knowledge-loop.md
+      - path: packages/aro-cli/src/commands/plans.ts
+  - id: cli-distribution-model
+    document: cli-distribution-model.md
+    verified_at_commit: 3a26046d991638b90bfe9de4c460fe46067630dc
+    sources:
+      - path: packages/aro-cli/src/main.ts
+      - path: packages/aro-cli/package.json
+      - path: docs/distribution.md
