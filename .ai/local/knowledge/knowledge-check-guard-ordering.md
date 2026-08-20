@@ -1,6 +1,6 @@
 # knowledge 更新の検証順序
 
-正本は `docs/repo-knowledge-loop.md` と `README.md`。本書はそこから導いた索引・要約であり、
+正本は `docs/repo-knowledge-loop.md` と `docs/guard.md`。本書はそこから導いた索引・要約であり、
 正本を置き換えない。
 
 ## guard が検証する範囲
