@@ -24,3 +24,8 @@ entries:
       - path: packages/aro-cli/src/main.ts
       - path: packages/aro-cli/package.json
       - path: docs/distribution.md
+  - id: onboarding-stacked-pr-retarget
+    document: onboarding-stacked-pr-retarget.md
+    verified_at_commit: 5530a7db590a588e52f9b2cbba6524555039bebc
+    sources:
+      - path: docs/onboarding.md
