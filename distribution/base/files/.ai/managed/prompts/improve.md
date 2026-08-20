@@ -28,11 +28,15 @@ scheduled local だけは、後述の専用契約に従います。
 
 1. 変更してよいのは `ai.allowed_paths` に一致する path のみ。
 2. `ai.forbidden_paths`（および適用 policy の `forbidden_paths`）に一致する path は決して変更しない。
-3. 1 回の改善で触れるファイルは `ai.max_changed_files` と適用 policy の `change_limits.max_changed_files`
-   の小さい方以下、追加行数は適用 policy の `change_limits.max_added_lines` 以下に収める。
-   accepted Proposalの `decision.budget` を使う場合も、fetch済み default branch の exact full `BASE_SHA` を
-   固定し、merge-base が同じSHAになるよう `aro guard --repo . --base "$BASE_SHA"` を実行する。
-   branch refを `--base` に渡した場合は、Proposal budgetは認証・適用されずbaselineへ戻る。
+3. budget 未認証時の baseline は、変更ファイル数が
+   `ai.max_changed_files` と適用 policy の `change_limits.max_changed_files` の小さい方、追加行数が
+   policy の `change_limits.max_added_lines` である。accepted Proposal の `decision.budget` が認証済み budget なら、
+   budget で省略した軸は baseline、baseline 以下の要求値はその値、baseline を超える要求値は、その軸に
+   policy の `budget_ceiling` があれば `min(要求値, ceiling)`、無ければ baseline とする。
+   つまり ceiling が無い軸は baseline を超えて緩和しない。1 回の改善はこの effective limit 以下に収める。
+   budget を使う場合は、fetch 済み default branch の exact full `BASE_SHA` を固定し、merge-base が同じ SHA に
+   なるよう `aro guard --repo . --base "$BASE_SHA"` を実行する。branch ref を `--base` に渡した場合は
+   Proposal budget は認証・適用されず baseline へ戻る。
 4. 改善ループは `ai.max_loops` 回までで打ち切る。
 5. `.ai/managed/**` と `.ai/ai-repo-ops.lock.yaml` は編集しない（aro が管理）。
 6. `.github/workflows/**` と `.ai/project.yaml` は編集しない（前者は既定の禁止、
@@ -45,9 +49,10 @@ scheduled local だけは、後述の専用契約に従います。
 
 0. **開始前の安全確認**: `git status --short` を実行し、clean worktree であること（または専用
    branch / worktree で作業していること）を確認する。**既存の未コミット変更がある場合は、
-   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を
-   実行してから、**最新の default branch を起点に**専用 branch を切る
-   （例: `git switch -c chore/ai-improve-<topic> origin/<default branch>`）。
+   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を実行し、
+   `BASE_SHA="$(git rev-parse origin/<default branch>)"` でfetch済みremote default branchのexact full commitを
+   固定してから、**その `BASE_SHA` を起点に**専用 branch を切る
+   （例: `git switch -c chore/ai-improve-<topic> "$BASE_SHA"`）。
    古い HEAD の上で作業すると、次の手順の stale 判定が upstream の source 変更を見落とす。
 1. **改善対象を選ぶ**:
    - まず `.ai/local/proposals/**` を読み、**`status: accepted` の提案から 1 件選ぶ**ことを
@@ -66,10 +71,9 @@ scheduled local だけは、後述の専用契約に従います。
      （lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
 2. 変更を実施する。
 3. **自己検証を行う（両方とも通ること）**:
-   - `git fetch origin <default branch>` してから
-     `aro guard --repo . --base origin/<default branch>` — policies 違反の機械検証
-     （fetch 済みの `origin/<default branch>` を使うと、ローカルの default branch が
-     古くても CI に近い merge-base で検証できる）。
+   - `git fetch origin <default branch>` を再実行し、remote default branch の OID が `BASE_SHA` と一致することを
+     確認する。一致しなければ古いbaseで続行せず停止し、最新SHAから専用branch/worktreeを作り直す。
+     一致したら `aro guard --repo . --base "$BASE_SHA"` でpolicies違反を機械検証する。
      **`severity: warn` の違反も中止条件として扱う**（exit 0 でも警告が 1 件でもあれば
      手順 4 に従い、変更を破棄して提案に留める）。warn は人間の PR を通すための緩和であって、
      AI の行動半径を広げるものではない。

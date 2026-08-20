@@ -374,10 +374,30 @@ describe("distribution/base（Phase 3 完了条件）", () => {
 
   it("improve promptがbudget利用時のfull BASE_SHA固定とbranch ref不適用を案内する", async () => {
     const prompt = await readFile(IMPROVE_PROMPT, "utf8");
-    expect(prompt).toContain("full `BASE_SHA`");
-    expect(prompt).toContain("branch ref");
-    expect(prompt).toContain("budget");
-    expect(prompt).toContain("default branch");
+    const workflowStart = prompt.indexOf("## 進め方");
+    const workflowEnd = prompt.indexOf("## Scheduled local improve track（明示 opt-in）");
+    const workflow = prompt.slice(workflowStart, workflowEnd);
+
+    expect(workflowStart).toBeGreaterThanOrEqual(0);
+    expect(workflowEnd).toBeGreaterThan(workflowStart);
+    expect(prompt).toContain("merge-base が同じ SHA");
+    expect(workflow).toContain('`BASE_SHA="$(git rev-parse origin/<default branch>)"`');
+    expect(workflow).toContain('`git switch -c chore/ai-improve-<topic> "$BASE_SHA"`');
+    expect(workflow).toContain('`aro guard --repo . --base "$BASE_SHA"`');
+    expect(workflow).toContain("remote default branch の OID が `BASE_SHA` と一致");
+    expect(workflow).not.toContain("`aro guard --repo . --base origin/<default branch>`");
+  });
+
+  it("improve promptが認証budgetのeffective limit合成を実装どおり案内する", async () => {
+    const prompt = await readFile(IMPROVE_PROMPT, "utf8");
+    expect(prompt).toContain("budget 未認証時の baseline");
+    expect(prompt).toContain("認証済み budget");
+    expect(prompt).toContain("policy の `budget_ceiling`");
+    expect(prompt).toContain("baseline 以下の要求値はその値");
+    expect(prompt).toContain("`min(要求値, ceiling)`");
+    expect(prompt).toContain("ceiling が無い軸は baseline を超えて緩和しない");
+    expect(prompt).toContain("budget で省略した軸は baseline");
+    expect(prompt).toContain("effective limit 以下に収める");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
@@ -551,9 +571,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("proposal budget contractをdistribution 0.1.12として配布する", async () => {
+  it("effective budget guidanceをdistribution 0.1.13として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.1.12");
+    expect(loaded.manifest.version).toBe("0.1.13");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {
