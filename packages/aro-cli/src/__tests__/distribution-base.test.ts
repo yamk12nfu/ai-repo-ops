@@ -398,8 +398,40 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(prompt).toContain("ceiling が無い軸は baseline を超えて緩和しない");
     expect(prompt).toContain("budget で省略した軸は baseline");
     expect(prompt).toContain("effective limit 以下に収める");
-    expect(prompt).toContain("変更ファイル数・追加行数のいずれかが制約 3 で合成した effective limit");
+    expect(prompt).toContain("制約 3 で合成した effective limit を自己抑制の目安");
+    expect(prompt).toContain("正式な判定は");
     expect(prompt).not.toContain("`max_changed_files` を超える場合");
+  });
+
+  it("interactive improve flowがdoneをcommitしてからstrict・guard・gatesを実行する", async () => {
+    const prompt = await readFile(IMPROVE_PROMPT, "utf8");
+    const start = prompt.indexOf("## 進め方");
+    const end = prompt.indexOf("## Scheduled local improve track（明示 opt-in）");
+    const workflow = prompt.slice(start, end);
+    const markers = [
+      "fail-fast quality gates",
+      "`accepted` → `done`",
+      "`implementation commit`",
+      "`aro proposals check --repo . --strict`",
+      '`aro guard --repo . --base "$BASE_SHA"`',
+      "`all required quality gates`",
+      "開発者に evidence を提示",
+    ];
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    let previousIndex = -1;
+    for (const marker of markers) {
+      const currentIndex = workflow.indexOf(marker);
+      expect(currentIndex, marker).toBeGreaterThan(previousIndex);
+      previousIndex = currentIndex;
+    }
+    expect(workflow).toContain("guard は commit 済み HEAD と `BASE_SHA` の差分だけを検証");
+    expect(workflow).toContain("budget report が `applied`");
+    expect(workflow).toContain("implementation commit 後は commit / status を書き戻さない");
+    expect(workflow).toContain("blocked evidence として保全");
+    expect(workflow).toContain("push しない");
+    expect(workflow).toContain("PR の作成は開発者の確認を得てから");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
@@ -573,9 +605,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("effective budget abort guidanceをdistribution 0.1.14として配布する", async () => {
+  it("committed interactive verification guidanceをdistribution 0.2.0として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.1.14");
+    expect(loaded.manifest.version).toBe("0.2.0");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {

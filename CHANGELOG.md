@@ -11,10 +11,19 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Changed
+
+- 通常Improve loopの検証順序をfail-fast gates、`accepted -> done`を含むimplementation commit、repo-wide strict、
+  pinned full base SHAに対するguard、commit済みtreeの全required gatesへ統一。commit後に解消不能な失敗が出た場合は
+  statusやcommitを書き戻さずblocked evidenceとしてlocal branchを保全し、人間確認前にpushしない
+  （distribution version 0.2.0）。
+
 ### Fixed
 
 - Improve promptの破棄条件を変更ファイル数・追加行数の軸別effective limitに統一し、人間承認済みProposal budgetで
-  baselineを超えた正当な変更を通常Improve loopが破棄しないよう修正（distribution version 0.1.14）。
+  baselineを超えた正当な変更を通常Improve loopが破棄しないよう修正。guardをcommit後へ移し、budget reportの
+  `applied`を必須化することで、通常Improve loopでもProposal budgetを機械認証できるようにした
+  （distribution version 0.2.0）。
 
 ## [0.4.3] - 2026-08-20
 
