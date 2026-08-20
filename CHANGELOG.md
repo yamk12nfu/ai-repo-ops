@@ -11,6 +11,11 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Fixed
+
+- Improve promptの破棄条件を変更ファイル数・追加行数の軸別effective limitに統一し、人間承認済みProposal budgetで
+  baselineを超えた正当な変更を通常Improve loopが破棄しないよう修正（distribution version 0.1.14）。
+
 ## [0.4.3] - 2026-08-20
 
 ### Fixed

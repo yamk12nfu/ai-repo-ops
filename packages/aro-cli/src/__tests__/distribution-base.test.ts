@@ -398,6 +398,8 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(prompt).toContain("ceiling が無い軸は baseline を超えて緩和しない");
     expect(prompt).toContain("budget で省略した軸は baseline");
     expect(prompt).toContain("effective limit 以下に収める");
+    expect(prompt).toContain("変更ファイル数・追加行数のいずれかが制約 3 で合成した effective limit");
+    expect(prompt).not.toContain("`max_changed_files` を超える場合");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
@@ -571,9 +573,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("effective budget guidanceをdistribution 0.1.13として配布する", async () => {
+  it("effective budget abort guidanceをdistribution 0.1.14として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.1.13");
+    expect(loaded.manifest.version).toBe("0.1.14");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {
