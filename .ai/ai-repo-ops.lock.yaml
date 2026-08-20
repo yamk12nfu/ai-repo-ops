@@ -2,9 +2,9 @@ schema_version: 1
 source:
   repository: yamk12nfu/ai-repo-ops
   distribution: base
-  version: 0.1.11
+  version: 0.2.0
   commit: null
-  distribution_content_sha256: 9ef9c33a4fc84a700822dca8b023079dd9bc413d0ba6f8d2fcfd148070ab35be
+  distribution_content_sha256: 59500ee1e46cddc7e29f310ad3ef0f6bfb8825d8404fc379b9221742e642dac5
 checksum:
   algorithm: sha256
   mode: canonical_text_lf_utf8bom_strip_v1
@@ -15,7 +15,7 @@ managed_files:
     strategy: managed_overwrite
   - path: .ai/managed/prompts/improve.md
     source: distribution/base/files/.ai/managed/prompts/improve.md
-    installed_sha256: 8e1e728db92c6fba800ae35224e3e4b90aaada279d917642515f6b9ac140419a
+    installed_sha256: 2f1dc17787e9c1153c5d6285f683bf422997f0ce72dbb26bbe29cda08f857256
     strategy: managed_overwrite
   - path: .ai/managed/prompts/issue-fix.md
     source: distribution/base/files/.ai/managed/prompts/issue-fix.md
@@ -35,11 +35,11 @@ managed_files:
     strategy: managed_overwrite
   - path: .ai/managed/policies/default.yaml
     source: distribution/base/files/.ai/managed/policies/default.yaml
-    installed_sha256: 8675b07e772958d2d6b5e2431e380dcfadd1bf95f4bb86b9ceaf66cd05d52fd6
+    installed_sha256: 71a3e4afc8efcc961faa5ac80c20ee7c32320fb492073884ad712f19da920d24
     strategy: managed_overwrite
   - path: .ai/managed/policies/low-risk.yaml
     source: distribution/base/files/.ai/managed/policies/low-risk.yaml
-    installed_sha256: eea532d5a3ba30c71e620167d6573ba99499e1626f362cf9f5ae93203584e696
+    installed_sha256: 3080cf57e9e27c60063223b17f99828a198948d244e8847473ea8c0ea0e9aa17
     strategy: managed_overwrite
   - path: .ai/managed/policies/security.yaml
     source: distribution/base/files/.ai/managed/policies/security.yaml
@@ -55,7 +55,7 @@ managed_files:
     strategy: managed_overwrite
   - path: .ai/managed/schemas/proposal.schema.json
     source: distribution/base/files/.ai/managed/schemas/proposal.schema.json
-    installed_sha256: 3e5b30176edab78f867fff2553b890f6481ee207e24036dd4bce400b3e724c0c
+    installed_sha256: fb0612a593d6a8ad7711c6e0d6ec85bb59cc80a4ed7c2bb70cbbe389a2fb9dca
     strategy: managed_overwrite
   - path: .ai/managed/schemas/execution-plan.schema.json
     source: distribution/base/files/.ai/managed/schemas/execution-plan.schema.json
@@ -91,4 +91,4 @@ patches:
       - .ai/managed/
       - .ai/ai-repo-ops.lock.yaml
 created_at: 2026-08-04T17:03:49.003Z
-updated_at: 2026-08-18T12:47:41.216Z
+updated_at: 2026-08-20T08:39:32.334Z

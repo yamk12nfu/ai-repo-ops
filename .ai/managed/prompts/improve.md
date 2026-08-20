@@ -11,8 +11,9 @@ scheduled local だけは、後述の専用契約に従います。
 
 - `.ai/local/proposals/**`: **改善対象の第一の供給源**。`status: accepted` の提案が実装待ちの
   キューである。**新しい提案の作成は propose プロンプトの仕事**であり、このループで行う
-  提案ファイルの編集は「実装完了に伴う `accepted` → `done` への変更」（手順 5）と
-  「実装破棄の記録の追記」（手順 4）の 2 つだけである。
+  提案ファイルの編集は「実装完了に伴う `accepted` → `done` への変更」（手順 4）と
+  「実装失敗の記録の追記」（手順 3 / 6）に加え、開発者がpremiseを再確認した場合の
+  `proposed_at_commit` 更新（手順 5.2）だけである。
 - `.ai/project.yaml`: 特に `project.risk_level` / `ai.max_loops` / `ai.max_changed_files` /
   `ai.allowed_paths` / `ai.forbidden_paths` / `commands` / `quality_gates` / `review`。
 - `.ai/managed/policies/*.yaml`: 適用ポリシー。`project.risk_level` に対応するものを読む
@@ -24,12 +25,19 @@ scheduled local だけは、後述の専用契約に従います。
 以下はプロンプト上のお願いではなく、**`aro guard` と CI によって機械的に検証される**。
 `severity: fail` の違反は PR の required check が落ちるため、merge に至らない。
 `severity: warn` の違反は exit 0 で報告のみだが、この改善ループでは中止条件として扱う
-（手順 4 参照）。
+（手順 5 参照）。
 
 1. 変更してよいのは `ai.allowed_paths` に一致する path のみ。
 2. `ai.forbidden_paths`（および適用 policy の `forbidden_paths`）に一致する path は決して変更しない。
-3. 1 回の改善で触れるファイルは `ai.max_changed_files` と適用 policy の `change_limits.max_changed_files`
-   の小さい方以下、追加行数は適用 policy の `change_limits.max_added_lines` 以下に収める。
+3. budget 未認証時の baseline は、変更ファイル数が
+   `ai.max_changed_files` と適用 policy の `change_limits.max_changed_files` の小さい方、追加行数が
+   policy の `change_limits.max_added_lines` である。accepted Proposal の `decision.budget` が認証済み budget なら、
+   budget で省略した軸は baseline、baseline 以下の要求値はその値、baseline を超える要求値は、その軸に
+   policy の `budget_ceiling` があれば `min(要求値, ceiling)`、無ければ baseline とする。
+   つまり ceiling が無い軸は baseline を超えて緩和しない。1 回の改善はこの effective limit 以下に収める。
+   budget を使う場合は、fetch 済み default branch の exact full `BASE_SHA` を固定し、merge-base が同じ SHA に
+   なるよう `aro guard --repo . --base "$BASE_SHA"` を実行する。branch ref を `--base` に渡した場合は
+   Proposal budget は認証・適用されず baseline へ戻る。
 4. 改善ループは `ai.max_loops` 回までで打ち切る。
 5. `.ai/managed/**` と `.ai/ai-repo-ops.lock.yaml` は編集しない（aro が管理）。
 6. `.github/workflows/**` と `.ai/project.yaml` は編集しない（前者は既定の禁止、
@@ -42,9 +50,10 @@ scheduled local だけは、後述の専用契約に従います。
 
 0. **開始前の安全確認**: `git status --short` を実行し、clean worktree であること（または専用
    branch / worktree で作業していること）を確認する。**既存の未コミット変更がある場合は、
-   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を
-   実行してから、**最新の default branch を起点に**専用 branch を切る
-   （例: `git switch -c chore/ai-improve-<topic> origin/<default branch>`）。
+   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を実行し、
+   `BASE_SHA="$(git rev-parse origin/<default branch>)"` でfetch済みremote default branchのexact full commitを
+   固定してから、**その `BASE_SHA` を起点に**専用 branch を切る
+   （例: `git switch -c chore/ai-improve-<topic> "$BASE_SHA"`）。
    古い HEAD の上で作業すると、次の手順の stale 判定が upstream の source 変更を見落とす。
 1. **改善対象を選ぶ**:
    - まず `.ai/local/proposals/**` を読み、**`status: accepted` の提案から 1 件選ぶ**ことを
@@ -61,34 +70,50 @@ scheduled local だけは、後述の専用契約に従います。
      このループを終了する（stale の滞留を自選で覆い隠さない）。
    - `accepted` が 1 件も無い場合のみ、従来どおり小さく安全な改善を自分で 1 つ選ぶ
      （lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
-2. 変更を実施する。
-3. **自己検証を行う（両方とも通ること）**:
-   - `git fetch origin <default branch>` してから
-     `aro guard --repo . --base origin/<default branch>` — policies 違反の機械検証
-     （fetch 済みの `origin/<default branch>` を使うと、ローカルの default branch が
-     古くても CI に近い merge-base で検証できる）。
-     **`severity: warn` の違反も中止条件として扱う**（exit 0 でも警告が 1 件でもあれば
-     手順 4 に従い、変更を破棄して提案に留める）。warn は人間の PR を通すための緩和であって、
-     AI の行動半径を広げるものではない。
-   - `quality_gates.required` に対応する `commands.*` のコマンド — すべて緑であること
-4. guard 違反・gates 失敗を解消できない、または `max_changed_files` を超える場合は
-   変更を破棄する（無理に通そうとしない）。
-   **破棄してよいのは、この改善ループで自分が作成・変更したファイルだけ。破棄前に
-   対象ファイルの一覧を開発者へ提示して確認を得る。**
-   提案を実装していた場合、その提案は **`accepted` のまま据え置き**（`open` へ戻さない。
-   破棄されたのは実装の試みであって、人間が下した採用の判断ではない）、提案本文の
-   「リスク・見送る理由になりうる点」に破棄の日時・理由・その時点の HEAD SHA を追記する。
-   **この破棄の記録は捨てない**: 実装の変更を破棄した後、提案ファイルだけの変更として
-   commit し、開発者の確認を得て PR にする（`status` が変わらないため guard の違反にならず、
-   通常どおり merge できる。記録が残ることで、同じ提案の再実装が同じ理由で失敗するのを防ぐ）。
-5. 自己検証が通ったら、改善内容を開発者に提示する。提案を実装した場合は、**その提案の
-   `status` を `accepted` → `done` に変更し、同じ PR に含める**（この遷移だけは guard の
-   違反にならない。実装を伴わない `done` 化は人間がレビューで却下する）。
-   提案ファイルを変更した場合（`done` 化・破棄記録の追記のどちらでも）は、最終状態に対して
-   `aro proposals check --repo . --strict` を再実行して通ることを確認する（CI は提案の変更を
-   含む PR を strict で検証するため、ローカルでも同じ条件で確認しておく）。
-   **PR の作成は開発者の確認を得てから**行う（タイトル規約: `chore(ai-improve): <改善の要約>`）。
-   `require_human_review` が true の間は自動 merge しない（merge は常に人間が判断する）。
+2. 変更を実施する。制約 3 で合成した effective limit を自己抑制の目安にするが、正式な判定は
+   commit 後の guard 出力だけを正とする。
+3. **`fail-fast quality gates`**: working tree に `quality_gates.required` の全 `commands.*` を先行実行する。
+   ここで解消できない失敗があり、まだ実装を commit していなければ、自分が変更したファイルだけを対象に
+   一覧を開発者へ提示して確認を得てから破棄する。提案実装の場合は `accepted` のまま据え置き、提案本文の
+   「リスク・見送る理由になりうる点」に破棄の日時・理由・その時点の HEAD SHA を追記する。この記録は
+   `BASE_SHA` から切った別 branch で記録だけを commit し、`aro proposals check --repo . --strict` を通してから
+   開発者の確認を得て PR にする。全fail-fast gateが緑になるまで手順4へ進まない。
+4. **commit 済み検証対象を確定する**:
+   - 提案を実装した場合は、その 1 件だけを **`accepted` → `done`** に変更する。
+     `decision.budget` など人間の decision は変更しない。実装を伴わない `done` 化は禁止する。
+   - status変更と実装を同じ **`implementation commit`** に含める。自選改善の場合は proposal の status を
+     変更せず、実装だけを commit する。
+   - `IMPLEMENTATION_SHA="$(git rev-parse HEAD)"` を記録する。**guard は commit 済み HEAD と `BASE_SHA` の差分だけを検証**し、
+     working tree を検証しないため、この commit より前に guard を成功判定へ使わない。
+   - implementation commit 後は commit / status を書き戻さない。amend・rebase・`done` からの書き戻しを禁止する。
+5. **commit 済み tree をこの順で自己検証する**:
+   1. `git fetch origin <default branch>` を再実行し、remote default branch の OID が `BASE_SHA` と一致することを
+      確認する。不一致なら続行もrebaseもせず停止し、開発者へ判断を求める。
+   2. **`aro proposals check --repo . --strict`**。collateral stale があれば一覧を開発者へ提示し、開発者が
+      premise を `IMPLEMENTATION_SHA` で再確認した提案だけ `proposed_at_commit` を更新して別commitにする。
+      AIだけで再確認したことにしない。revalidationが成立しなければ停止する。provenance commit後は
+      `PROVENANCE_SHA="$(git rev-parse HEAD)"` を記録し、そのcommitを含む最終treeに対して手順5を最初から
+      再実行する。`PROVENANCE_SHA`は監査用であり、revalidation・evidence・祖先確認に使う最終実装SHAは
+      常に`IMPLEMENTATION_SHA`とする。
+   3. **`aro guard --repo . --base "$BASE_SHA"`**。`severity: warn` も中止条件とする。実装した提案に
+      `decision.budget` がある場合は、guard の budget report が `applied` であることも必須とし、
+      `not_applicable` / `rejected` は失敗扱いにする。
+   4. **`all required quality gates`**: `quality_gates.required` の全 `commands.*` をcommit済みtreeで再実行する。
+6. commit 後の検証失敗を通常の追いcommitで直せる場合は、proposal statusを変更せず修正commitを作り、直後に
+   `IMPLEMENTATION_SHA="$(git rev-parse HEAD)"` へ更新して手順5を最初から再実行する。以前の
+   `PROVENANCE_SHA` を最終実装SHAの代わりに使わない。追いcommitがProposal sourceを変更した場合、
+   collateral revalidationも更新後の`IMPLEMENTATION_SHA`に対してやり直す。
+   解消できない場合は **implementation commit 後は commit / status を書き戻さない**。local branch、
+   `IMPLEMENTATION_SHA`、diff、guard・strict・gate出力を blocked evidence として保全し、push しない。
+   remote default branch 上のproposalは`accepted`のまま維持される。失敗記録が必要なら、`BASE_SHA`から切った
+   別branchでacceptedの提案本文だけへ日時・理由・blocked branchのHEAD SHAを追記し、
+   `aro proposals check --repo . --strict` を通してから開発者確認後に記録PRにする。
+7. 全検証が通ったら、commit SHA、exact diff、strict・guard・gate結果、budget判定を含めて
+   **開発者に evidence を提示**する。push と **PR の作成は開発者の確認を得てから**行う
+   （タイトル規約: `chore(ai-improve): <改善の要約>`）。`require_human_review` が true の間は自動 merge しない
+   （merge は常に人間が判断する）。collateral revalidationで`proposed_at_commit`を`IMPLEMENTATION_SHA`へ
+   更新した場合、PR本文に**Create a merge commit必須、squash/rebase禁止**を明記する。merge後は
+   `IMPLEMENTATION_SHA`がdefault branchの祖先であることを確認する。
 
 ## Scheduled local improve track（明示 opt-in）
 
@@ -201,7 +226,7 @@ replacement でも diff と packet を新 SHA だけから作る。再び OID �
 未commitのまま `accepted` に戻す。implementation commit 後は commit / status を書き戻さない。local branch、
 inventory、diff、review / gate 出力を blocked evidence として保全し、push しないため remote default branch 上の
 proposal status は `accepted` のまま維持される。
-discarded-attempt の proposal 記録は既存の手順 4 に従う separate record PR とし、
+discarded-attempt の proposal 記録は既存の手順 3 / 6 に従う separate record PR とし、
 人間の確認なしに scheduled push しない。
 auto-merge / deploy / release / workflow / secret 変更は禁止する。credential は allowlist の対象 repo に限定し、
 必要最小限の repository permission だけを与えて他 repo への write を許可しない。default branch と必要な
