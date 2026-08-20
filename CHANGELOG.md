@@ -11,6 +11,8 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-08-20
+
 ### Changed
 
 - 通常Improve loopの検証順序をfail-fast gates、`accepted -> done`を含むimplementation commit、repo-wide strict、
@@ -383,7 +385,8 @@ echo するだけの stub。** AI 実行の実装は Post-MVP（[計画 02](./do
   タグ発行までは `v1` タグが存在しないため、`aro init` 済みの対象 repo で workflow が解決エラーになる。
   本リリース（`v0.1.0` タグ発行 + `v1` 移動）で解消する。
 
-[Unreleased]: https://github.com/yamk12nfu/ai-repo-ops/compare/v0.4.3...HEAD
+[Unreleased]: https://github.com/yamk12nfu/ai-repo-ops/compare/v0.4.4...HEAD
+[0.4.4]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.4.4
 [0.4.3]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.4.3
 [0.4.2]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.4.2
 [0.4.1]: https://github.com/yamk12nfu/ai-repo-ops/tree/v0.4.1
