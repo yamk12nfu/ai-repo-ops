@@ -11,8 +11,8 @@ scheduled local だけは、後述の専用契約に従います。
 
 - `.ai/local/proposals/**`: **改善対象の第一の供給源**。`status: accepted` の提案が実装待ちの
   キューである。**新しい提案の作成は propose プロンプトの仕事**であり、このループで行う
-  提案ファイルの編集は「実装完了に伴う `accepted` → `done` への変更」（手順 5）と
-  「実装破棄の記録の追記」（手順 4）の 2 つだけである。
+  提案ファイルの編集は「実装完了に伴う `accepted` → `done` への変更」（手順 4）と
+  「実装失敗の記録の追記」（手順 3 / 6）の 2 つだけである。
 - `.ai/project.yaml`: 特に `project.risk_level` / `ai.max_loops` / `ai.max_changed_files` /
   `ai.allowed_paths` / `ai.forbidden_paths` / `commands` / `quality_gates` / `review`。
 - `.ai/managed/policies/*.yaml`: 適用ポリシー。`project.risk_level` に対応するものを読む
@@ -24,7 +24,7 @@ scheduled local だけは、後述の専用契約に従います。
 以下はプロンプト上のお願いではなく、**`aro guard` と CI によって機械的に検証される**。
 `severity: fail` の違反は PR の required check が落ちるため、merge に至らない。
 `severity: warn` の違反は exit 0 で報告のみだが、この改善ループでは中止条件として扱う
-（手順 4 参照）。
+（手順 5 参照）。
 
 1. 変更してよいのは `ai.allowed_paths` に一致する path のみ。
 2. `ai.forbidden_paths`（および適用 policy の `forbidden_paths`）に一致する path は決して変更しない。
@@ -215,7 +215,7 @@ replacement でも diff と packet を新 SHA だけから作る。再び OID �
 未commitのまま `accepted` に戻す。implementation commit 後は commit / status を書き戻さない。local branch、
 inventory、diff、review / gate 出力を blocked evidence として保全し、push しないため remote default branch 上の
 proposal status は `accepted` のまま維持される。
-discarded-attempt の proposal 記録は既存の手順 4 に従う separate record PR とし、
+discarded-attempt の proposal 記録は既存の手順 3 / 6 に従う separate record PR とし、
 人間の確認なしに scheduled push しない。
 auto-merge / deploy / release / workflow / secret 変更は禁止する。credential は allowlist の対象 repo に限定し、
 必要最小限の repository permission だけを与えて他 repo への write を許可しない。default branch と必要な

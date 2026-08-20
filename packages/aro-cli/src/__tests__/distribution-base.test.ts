@@ -432,6 +432,11 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(workflow).toContain("blocked evidence として保全");
     expect(workflow).toContain("push しない");
     expect(workflow).toContain("PR の作成は開発者の確認を得てから");
+    expect(prompt).toContain("`accepted` → `done` への変更」（手順 4）");
+    expect(prompt).toContain("実装失敗の記録の追記」（手順 3 / 6）");
+    expect(prompt).toContain("（手順 5 参照）");
+    expect(prompt).toContain("既存の手順 3 / 6 に従う separate record PR");
+    expect(prompt).not.toContain("既存の手順 4 に従う separate record PR");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
@@ -522,7 +527,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(track).toContain("local changes stage は implementation / tests と independent verification 後に停止");
     expect(track).toContain("`accepted -> done` / commit / guard / push / PR を行わない");
     expect(track).toContain("Draft PR stage だけが status transition / commit / guard / push / Draft PR");
-    expect(track).toContain("既存の手順 4 に従う separate record PR");
+    expect(track).toContain("既存の手順 3 / 6 に従う separate record PR");
     expect(track).toContain("人間の確認なしに scheduled push しない");
   });
 
