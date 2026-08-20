@@ -49,8 +49,9 @@ scheduled local だけは、後述の専用契約に従います。
 
 0. **開始前の安全確認**: `git status --short` を実行し、clean worktree であること（または専用
    branch / worktree で作業していること）を確認する。**既存の未コミット変更がある場合は、
-   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を
-   実行してから、**最新の default branch を起点に**専用 branch を切る
+   開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を実行し、
+   `BASE_SHA="$(git rev-parse origin/<default branch>)"` でfetch済みremote default branchのexact full commitを
+   固定してから、**その `BASE_SHA` を起点に**専用 branch を切る
    （例: `git switch -c chore/ai-improve-<topic> origin/<default branch>`）。
    古い HEAD の上で作業すると、次の手順の stale 判定が upstream の source 変更を見落とす。
 1. **改善対象を選ぶ**:
@@ -70,10 +71,9 @@ scheduled local だけは、後述の専用契約に従います。
      （lint 修正、テスト追加、デッドコード削除、ドキュメント整備など）。
 2. 変更を実施する。
 3. **自己検証を行う（両方とも通ること）**:
-   - `git fetch origin <default branch>` してから
-     `aro guard --repo . --base origin/<default branch>` — policies 違反の機械検証
-     （fetch 済みの `origin/<default branch>` を使うと、ローカルの default branch が
-     古くても CI に近い merge-base で検証できる）。
+   - `git fetch origin <default branch>` を再実行し、remote default branch の OID が `BASE_SHA` と一致することを
+     確認する。一致しなければ古いbaseで続行せず停止し、最新SHAから専用branch/worktreeを作り直す。
+     一致したら `aro guard --repo . --base "$BASE_SHA"` でpolicies違反を機械検証する。
      **`severity: warn` の違反も中止条件として扱う**（exit 0 でも警告が 1 件でもあれば
      手順 4 に従い、変更を破棄して提案に留める）。warn は人間の PR を通すための緩和であって、
      AI の行動半径を広げるものではない。

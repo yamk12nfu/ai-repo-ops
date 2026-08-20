@@ -374,10 +374,17 @@ describe("distribution/base（Phase 3 完了条件）", () => {
 
   it("improve promptがbudget利用時のfull BASE_SHA固定とbranch ref不適用を案内する", async () => {
     const prompt = await readFile(IMPROVE_PROMPT, "utf8");
-    expect(prompt).toContain("full `BASE_SHA`");
-    expect(prompt).toContain("branch ref");
-    expect(prompt).toContain("budget");
-    expect(prompt).toContain("default branch");
+    const workflowStart = prompt.indexOf("## 進め方");
+    const workflowEnd = prompt.indexOf("## Scheduled local improve track（明示 opt-in）");
+    const workflow = prompt.slice(workflowStart, workflowEnd);
+
+    expect(workflowStart).toBeGreaterThanOrEqual(0);
+    expect(workflowEnd).toBeGreaterThan(workflowStart);
+    expect(prompt).toContain("merge-base が同じ SHA");
+    expect(workflow).toContain('`BASE_SHA="$(git rev-parse origin/<default branch>)"`');
+    expect(workflow).toContain('`aro guard --repo . --base "$BASE_SHA"`');
+    expect(workflow).toContain("remote default branch の OID が `BASE_SHA` と一致");
+    expect(workflow).not.toContain("`aro guard --repo . --base origin/<default branch>`");
   });
 
   it("improve promptが認証budgetのeffective limit合成を実装どおり案内する", async () => {
