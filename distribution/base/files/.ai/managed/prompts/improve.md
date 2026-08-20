@@ -12,7 +12,8 @@ scheduled local だけは、後述の専用契約に従います。
 - `.ai/local/proposals/**`: **改善対象の第一の供給源**。`status: accepted` の提案が実装待ちの
   キューである。**新しい提案の作成は propose プロンプトの仕事**であり、このループで行う
   提案ファイルの編集は「実装完了に伴う `accepted` → `done` への変更」（手順 4）と
-  「実装失敗の記録の追記」（手順 3 / 6）の 2 つだけである。
+  「実装失敗の記録の追記」（手順 3 / 6）に加え、開発者がpremiseを再確認した場合の
+  `proposed_at_commit` 更新（手順 5.2）だけである。
 - `.ai/project.yaml`: 特に `project.risk_level` / `ai.max_loops` / `ai.max_changed_files` /
   `ai.allowed_paths` / `ai.forbidden_paths` / `commands` / `quality_gates` / `review`。
 - `.ai/managed/policies/*.yaml`: 適用ポリシー。`project.risk_level` に対応するものを読む
@@ -75,7 +76,8 @@ scheduled local だけは、後述の専用契約に従います。
    ここで解消できない失敗があり、まだ実装を commit していなければ、自分が変更したファイルだけを対象に
    一覧を開発者へ提示して確認を得てから破棄する。提案実装の場合は `accepted` のまま据え置き、提案本文の
    「リスク・見送る理由になりうる点」に破棄の日時・理由・その時点の HEAD SHA を追記する。この記録は
-   `BASE_SHA` から切った別 branch で記録だけを commit し、開発者の確認を得て PR にする。
+   `BASE_SHA` から切った別 branch で記録だけを commit し、`aro proposals check --repo . --strict` を通してから
+   開発者の確認を得て PR にする。全fail-fast gateが緑になるまで手順4へ進まない。
 4. **commit 済み検証対象を確定する**:
    - 提案を実装した場合は、その 1 件だけを **`accepted` → `done`** に変更する。
      `decision.budget` など人間の decision は変更しない。実装を伴わない `done` 化は禁止する。
@@ -89,7 +91,8 @@ scheduled local だけは、後述の専用契約に従います。
       確認する。不一致なら続行もrebaseもせず停止し、開発者へ判断を求める。
    2. **`aro proposals check --repo . --strict`**。collateral stale があれば一覧を開発者へ提示し、開発者が
       premise を `IMPLEMENTATION_SHA` で再確認した提案だけ `proposed_at_commit` を更新して別commitにする。
-      AIだけで再確認したことにしない。revalidationが成立しなければ停止する。
+      AIだけで再確認したことにしない。revalidationが成立しなければ停止する。provenance commit後は
+      そのcommitを含む最終treeに対して手順5を最初から再実行する。
    3. **`aro guard --repo . --base "$BASE_SHA"`**。`severity: warn` も中止条件とする。実装した提案に
       `decision.budget` がある場合は、guard の budget report が `applied` であることも必須とし、
       `not_applicable` / `rejected` は失敗扱いにする。
@@ -98,11 +101,14 @@ scheduled local だけは、後述の専用契約に従います。
    再実行する。解消できない場合は **implementation commit 後は commit / status を書き戻さない**。local branch、
    `IMPLEMENTATION_SHA`、diff、guard・strict・gate出力を blocked evidence として保全し、push しない。
    remote default branch 上のproposalは`accepted`のまま維持される。失敗記録が必要なら、`BASE_SHA`から切った
-   別branchでacceptedの提案本文だけへ日時・理由・blocked branchのHEAD SHAを追記し、開発者確認後に記録PRにする。
+   別branchでacceptedの提案本文だけへ日時・理由・blocked branchのHEAD SHAを追記し、
+   `aro proposals check --repo . --strict` を通してから開発者確認後に記録PRにする。
 7. 全検証が通ったら、commit SHA、exact diff、strict・guard・gate結果、budget判定を含めて
    **開発者に evidence を提示**する。push と **PR の作成は開発者の確認を得てから**行う
    （タイトル規約: `chore(ai-improve): <改善の要約>`）。`require_human_review` が true の間は自動 merge しない
-   （merge は常に人間が判断する）。
+   （merge は常に人間が判断する）。collateral revalidationで`proposed_at_commit`を`IMPLEMENTATION_SHA`へ
+   更新した場合、PR本文に**Create a merge commit必須、squash/rebase禁止**を明記する。merge後は
+   `IMPLEMENTATION_SHA`がdefault branchの祖先であることを確認する。
 
 ## Scheduled local improve track（明示 opt-in）
 

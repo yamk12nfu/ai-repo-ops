@@ -20,8 +20,8 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ### Fixed
 
-- Improve promptの破棄条件を変更ファイル数・追加行数の軸別effective limitに統一し、人間承認済みProposal budgetで
-  baselineを超えた正当な変更を通常Improve loopが破棄しないよう修正。guardをcommit後へ移し、budget reportの
+- Improve promptの実装中の自己抑制を変更ファイル数・追加行数の軸別effective limitに統一し、人間承認済みProposal budgetで
+  baselineを超えた正当な変更を通常Improve loopが誤破棄しないよう修正。正式な上限判定をcommit後のguardへ移し、budget reportの
   `applied`を必須化することで、通常Improve loopでもProposal budgetを機械認証できるようにした
   （distribution version 0.2.0）。
 

@@ -422,7 +422,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(end).toBeGreaterThan(start);
     let previousIndex = -1;
     for (const marker of markers) {
-      const currentIndex = workflow.indexOf(marker);
+      const currentIndex = workflow.indexOf(marker, previousIndex + 1);
       expect(currentIndex, marker).toBeGreaterThan(previousIndex);
       previousIndex = currentIndex;
     }
@@ -433,10 +433,17 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(workflow).toContain("push しない");
     expect(workflow).toContain("PR の作成は開発者の確認を得てから");
     expect(prompt).toContain("`accepted` → `done` への変更」（手順 4）");
-    expect(prompt).toContain("実装失敗の記録の追記」（手順 3 / 6）");
+    expect(prompt).toContain("実装失敗の記録の追記」（手順 3 / 6）に加え");
+    expect(prompt).toContain("`proposed_at_commit` 更新（手順 5.2）だけ");
     expect(prompt).toContain("（手順 5 参照）");
     expect(prompt).toContain("既存の手順 3 / 6 に従う separate record PR");
     expect(prompt).not.toContain("既存の手順 4 に従う separate record PR");
+    expect(workflow).toContain("全fail-fast gateが緑になるまで手順4へ進まない");
+    expect(workflow).toContain("provenance commit後は");
+    expect(workflow).toContain("手順5を最初から再実行する");
+    expect(workflow.match(/`aro proposals check --repo \. --strict` を通してから/g)).toHaveLength(2);
+    expect(workflow).toContain("Create a merge commit必須、squash/rebase禁止");
+    expect(workflow).toContain("`IMPLEMENTATION_SHA`がdefault branchの祖先");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
