@@ -382,6 +382,7 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(workflowEnd).toBeGreaterThan(workflowStart);
     expect(prompt).toContain("merge-base が同じ SHA");
     expect(workflow).toContain('`BASE_SHA="$(git rev-parse origin/<default branch>)"`');
+    expect(workflow).toContain('`git switch -c chore/ai-improve-<topic> "$BASE_SHA"`');
     expect(workflow).toContain('`aro guard --repo . --base "$BASE_SHA"`');
     expect(workflow).toContain("remote default branch の OID が `BASE_SHA` と一致");
     expect(workflow).not.toContain("`aro guard --repo . --base origin/<default branch>`");

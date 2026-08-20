@@ -52,7 +52,7 @@ scheduled local だけは、後述の専用契約に従います。
    開発者に確認するまで一切の変更・破棄を行わない。** `git fetch origin <default branch>` を実行し、
    `BASE_SHA="$(git rev-parse origin/<default branch>)"` でfetch済みremote default branchのexact full commitを
    固定してから、**その `BASE_SHA` を起点に**専用 branch を切る
-   （例: `git switch -c chore/ai-improve-<topic> origin/<default branch>`）。
+   （例: `git switch -c chore/ai-improve-<topic> "$BASE_SHA"`）。
    古い HEAD の上で作業すると、次の手順の stale 判定が upstream の source 変更を見落とす。
 1. **改善対象を選ぶ**:
    - まず `.ai/local/proposals/**` を読み、**`status: accepted` の提案から 1 件選ぶ**ことを
