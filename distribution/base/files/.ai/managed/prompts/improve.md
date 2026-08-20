@@ -28,14 +28,15 @@ scheduled local だけは、後述の専用契約に従います。
 
 1. 変更してよいのは `ai.allowed_paths` に一致する path のみ。
 2. `ai.forbidden_paths`（および適用 policy の `forbidden_paths`）に一致する path は決して変更しない。
-3. budget未認証時のbaselineは、変更ファイル数が
+3. budget 未認証時の baseline は、変更ファイル数が
    `ai.max_changed_files` と適用 policy の `change_limits.max_changed_files` の小さい方、追加行数が
-   policyの`change_limits.max_added_lines`である。accepted Proposalの`decision.budget`が認証済みbudgetなら、
-   budgetで省略した軸はbaseline、baseline以下の要求値はその値、baselineを超える要求値は
-   policyの`budget_ceiling`以下でのみ適用する。ceilingが無い軸はbaselineを超えて緩和しない。
-   budgetを使う場合は、fetch済みdefault branchのexact full `BASE_SHA`を固定し、merge-baseが同じSHAに
-   なるよう`aro guard --repo . --base "$BASE_SHA"`を実行する。branch refを`--base`に渡した場合は
-   Proposal budgetは認証・適用されずbaselineへ戻る。
+   policy の `change_limits.max_added_lines` である。accepted Proposal の `decision.budget` が認証済み budget なら、
+   budget で省略した軸は baseline、baseline 以下の要求値はその値、baseline を超える要求値は、その軸に
+   policy の `budget_ceiling` があれば `min(要求値, ceiling)`、無ければ baseline とする。
+   つまり ceiling が無い軸は baseline を超えて緩和しない。1 回の改善はこの effective limit 以下に収める。
+   budget を使う場合は、fetch 済み default branch の exact full `BASE_SHA` を固定し、merge-base が同じ SHA に
+   なるよう `aro guard --repo . --base "$BASE_SHA"` を実行する。branch ref を `--base` に渡した場合は
+   Proposal budget は認証・適用されず baseline へ戻る。
 4. 改善ループは `ai.max_loops` 回までで打ち切る。
 5. `.ai/managed/**` と `.ai/ai-repo-ops.lock.yaml` は編集しない（aro が管理）。
 6. `.github/workflows/**` と `.ai/project.yaml` は編集しない（前者は既定の禁止、

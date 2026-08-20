@@ -382,11 +382,14 @@ describe("distribution/base（Phase 3 完了条件）", () => {
 
   it("improve promptが認証budgetのeffective limit合成を実装どおり案内する", async () => {
     const prompt = await readFile(IMPROVE_PROMPT, "utf8");
-    expect(prompt).toContain("budget未認証時のbaseline");
-    expect(prompt).toContain("認証済みbudget");
-    expect(prompt).toContain("policyの`budget_ceiling`");
-    expect(prompt).toContain("ceilingが無い軸はbaselineを超えて緩和しない");
-    expect(prompt).toContain("budgetで省略した軸はbaseline");
+    expect(prompt).toContain("budget 未認証時の baseline");
+    expect(prompt).toContain("認証済み budget");
+    expect(prompt).toContain("policy の `budget_ceiling`");
+    expect(prompt).toContain("baseline 以下の要求値はその値");
+    expect(prompt).toContain("`min(要求値, ceiling)`");
+    expect(prompt).toContain("ceiling が無い軸は baseline を超えて緩和しない");
+    expect(prompt).toContain("budget で省略した軸は baseline");
+    expect(prompt).toContain("effective limit 以下に収める");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
