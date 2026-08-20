@@ -1,167 +1,323 @@
 # ai-repo-ops
 
-AI運用基盤の標準装備を、複数のGitHubリポジトリへ安全に配布・更新・検証するための中央管理ツール。
+`ai-repo-ops`（CLI: `aro`）は、AI支援開発の運用基盤を複数のGitリポジトリへ配布し、
+AIが作る変更と各リポジトリが所有する運用状態を、AIなしで決定的に検証するためのツールです。
 
-> ステータス: **MVP 完了**（Phase 0〜7）+ `aro guard` + Repo Knowledge Loop + Proposal Loop。`aro init` / `aro diff` / `aro sync` / `aro doctor` / `aro guard` / `aro knowledge` / `aro proposals check` はすべて実装済み。詳細仕様は [`docs/`](./docs/) を参照。リリース手順は [`RELEASE.md`](./RELEASE.md)、変更履歴は [`CHANGELOG.md`](./CHANGELOG.md) を参照。
+プロンプト・ポリシー・スキーマを中央から同期し、初回生成したCI callerから中央のreusable workflowを
+参照します。repo固有のknowledge、proposal、execution planは各repoのGit履歴に残します。AIは開発者の
+ローカル環境で動かし、提案の採否、権限段階のpromotion、mergeは人間の判断として分離します。
 
-AI 実行の方針は「**AI はローカル、CI は決定的検証**」。CI（配布 workflow）に従量課金 API キーの AI を組み込む方向は採らず、PR レビューは既存サービス（CodeRabbit 等）に任せる。v0.1.1 の `ai-review` workflow にあった claude-code-action ベースの AI レビューは廃止し、現在のエンジンは `aro guard` と `aro knowledge check`（AI 不要の機械検証）へ差し替え済み。旧 `anthropic_api_key` 入力は互換性のため受け取り口だけ残しているが、現行エンジンは使用せず登録も不要である（経緯は [`docs/plans/02-ai-review-commenter.md`](./docs/plans/02-ai-review-commenter.md) 冒頭の注記を参照）。コード改善と repo 固有knowledgeの更新は開発者が手元の Claude Code / Codex で回す（[`docs/local-improve-loop.md`](./docs/local-improve-loop.md)、[`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md)）。`ai-improve` workflow は計画 03 Stage 2-2 で**配布物から除去済み**（`ai-improve.reusable.yml` は既存 repo の参照を壊さない no-op stub のみ）。本ツールが担うのは AI 運用基盤の**配布・更新・診断・強制・根拠付きknowledge検証**である。
+- CLI version: `0.4.4`
+- Distribution version: `0.2.0`
+- Node.js: `>=20`
+- Package manager: `pnpm@9.15.9`
 
-## Documentation
+## 設計原則
 
-- [`docs/onboarding.md`](./docs/onboarding.md) — 対象 repo への導入手順と init 後の `project.yaml` 調整（事実上必須）・override merge の運用
-- [`docs/distribution.md`](./docs/distribution.md) — manifest / strategy / distribution content hash / authoritative schema
-- [`docs/sync-strategy.md`](./docs/sync-strategy.md) — canonical text・checksum・conflict判定・atomicity・コマンド終了コード
-- [`docs/security.md`](./docs/security.md) — path traversal / symlink / 固定保護path / workflow permissions
-- [`docs/guard.md`](./docs/guard.md) — `aro guard` の検証項目・merge-base 設計（自己改変防止）・CI での利用
-- [`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md) — repo固有knowledgeの形式・鮮度・安全境界・導入手順
-- [`docs/local-improve-loop.md`](./docs/local-improve-loop.md) — ローカル改善ループの運用手順（起動・自己検証・PR 規約）
-- [`docs/proposal-loop.md`](./docs/proposal-loop.md) — 提案・採否・実装を分離して回す Proposal Loop の運用手順書
-- [`docs/ai-review.md`](./docs/ai-review.md) — v0.1.1 時点の AI レビュー実装記録（方向転換により非推奨。有効化はしない）
-- [`docs/existing-tools.md`](./docs/existing-tools.md) — Copier / Cruft との関係、自作する理由、再評価ポイント
-- [`docs/plans/`](./docs/plans/) — Post-MVP 計画書（AI 実行本体・fleet 展開など）
+### AIはローカル、CIは決定的検証
+
+Claude CodeやCodexなどのAIは、開発者が管理するローカル環境で実行します。CIはLLMを呼び出さず、
+`aro guard`、`aro knowledge check`、`aro proposals check`などの決定的な検証だけを行います。
+repoごとのAI API keyや、CI上のAI cronは必要ありません。
+
+### 運用状態はrepoが所有する
+
+会話履歴、GitHub Issue、scheduler固有の設定を実行判断の正本にしません。各repoが次の状態をGit管理します。
+
+| 状態 | 保存先 | 役割 |
+|---|---|---|
+| Project config | `.ai/project.yaml` | quality gates、AIの変更可能範囲、risk level |
+| Knowledge | `.ai/local/knowledge/**` | repo固有の索引・要約と、その根拠・検証commit |
+| Proposals | `.ai/local/proposals/**` | 改善提案、根拠、人間による採否、変更予算 |
+| Execution Plans | `.ai/local/execution-plans/**` | 実行計画、現在stage、次の操作、許可された副作用 |
+
+中央distributionは`.ai/managed/**`を管理しますが、`.ai/local/**`と`.ai/project.yaml`はconsumer repoの
+所有物として保持します。
+
+### 判断と副作用を段階化する
+
+AIはopen proposalの作成や、accepted proposalの実装を担えます。一方、次の変更は`aro guard`が
+required checkのfailureとして表面化し、人間による確認と明示的なoverrideを要求します。
+
+- `.ai/project.yaml`による検証境界の変更
+- proposalの採否変更
+- execution planのpromotionや`commit` / `push` / `draft_pr`権限の拡大
+
+`permissions.merge: true`は常に拒否され、mergeは人間の責務として残ります。
+
+## 全体像
+
+```text
+ai-repo-ops（中央repo）
+  ├─ prompts / policies / schemas
+  ├─ reusable CI workflow
+  └─ aro init / diff / sync / doctor
+                │
+                ▼
+consumer repo
+  ├─ .ai/managed/**              中央から同期
+  ├─ .ai/ai-repo-ops.lock.yaml   同期状態を記録
+  ├─ .ai/project.yaml            repo固有設定
+  ├─ .github/workflows/ai-review.yml
+  │                               初回生成。中央のreusable workflowを参照
+  └─ .ai/local/**                repo-owned state
+       ├─ knowledge
+       ├─ proposals
+       └─ execution-plans
+                │
+                │ ローカルAIが提案・実装
+                ▼
+               PR
+                │
+                ├─ aro guard / strict checks / quality gates
+                └─ 人間のreview・必要なoverride・merge判断
+```
+
+## Getting Started
+
+### 1. 中央repoを準備する
+
+現時点の第一級サポートは、中央repoのcloneとglobal linkです。global linkには、`pnpm setup`済みで
+`PNPM_HOME`が`PATH`に含まれている環境が必要です。
+
+```bash
+git clone git@github.com:yamk12nfu/ai-repo-ops.git
+cd ai-repo-ops
+corepack enable
+pnpm install --frozen-lockfile
+pnpm build
+pnpm -C packages/aro-cli link --global
+aro --version
+```
+
+`aro`をglobal linkしない場合は、build後のentrypointを直接実行できます。
+
+```bash
+node /path/to/ai-repo-ops/packages/aro-cli/bin/aro --help
+```
+
+packした`@ai-repo-ops/aro-cli`からもCLIは起動できますが、distributionはpackageに同梱されません。
+`init` / `diff` / `sync` / `doctor`などでは`--source /path/to/ai-repo-ops`を指定してください。
+このpackageは現在privateで、public npm registryには公開していません。
+
+### 2. consumer repoへ導入する
+
+```bash
+aro init --repo /path/to/target-repo
+aro doctor --repo /path/to/target-repo
+```
+
+この時点の`doctor`は、汎用初期値の`commands.*`が未設定であることをWARNとして報告します。次の設定PRで
+実際に成功するコマンドを登録して解消します。
+
+`aro init`の生成物は、まず調整せずにcommitし、導入PRとしてmergeします。次のPRで`.ai/project.yaml`を
+repoの実態に合わせて調整します。
+
+```yaml
+commands:
+  setup: "pnpm install --frozen-lockfile"
+  lint: "pnpm lint"
+  typecheck: "pnpm typecheck"
+  test: "pnpm test"
+  build: "pnpm build"
+
+quality_gates:
+  required:
+    - lint
+    - typecheck
+    - test
+    - build
+
+ai:
+  allowed_paths:
+    - "src/**"
+    - "tests/**"
+    - "docs/**"
+```
+
+`.ai/project.yaml`の変更は検証ルール自体の変更なので、`aro guard`が`project_config` violationで
+意図的にfailします。人間が変更内容を確認し、明示的にoverrideしてmergeしてください。
+
+導入PRではmerge-base側に`.ai/project.yaml`とpolicyがまだ無いため、中央workflowはguardを検証不能として
+明示的にskipし、成功します。guardが変更を検証し始めるのは、導入PRをmergeした後の次のPRからです。
+
+その後、knowledge領域を初期化できます。
+
+```bash
+aro knowledge init --repo /path/to/target-repo --base origin/main
+aro knowledge check --repo /path/to/target-repo --strict
+```
+
+導入PRと設定PRを分ける理由、`allowed_paths`とquality gatesの調整方法は
+[`docs/onboarding.md`](./docs/onboarding.md)を参照してください。
+
+## 日常の運用ループ
+
+```text
+tracked source
+    │
+    ├─ knowledge refresh ──► 根拠付きrepo knowledge
+    │
+    └─ propose ──► open proposal ──► 人間の採否
+                                      │
+                                      ▼
+                                accepted proposal
+                                      │
+                                      ▼
+                          improve / execution plan
+                                      │
+                                      ▼
+                         guard + gates + review
+                                      │
+                                      ▼
+                                  人間がmerge
+```
+
+### Repo Knowledge Loop
+
+`.ai/local/knowledge/**`に、コードや正式ドキュメントから導いた索引・要約を置きます。knowledgeは正本を
+置き換えず、各entryがsource pathと検証済みcommitを持ちます。sourceがその後変更されるとstaleとして
+検出されます。
+
+```bash
+aro knowledge check --repo . --strict
+```
+
+詳細: [`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md)
+
+### Proposal Loop
+
+AIは既存の判断履歴を読んで`status: open`のproposalを作ります。採否と、routine limitを超える変更に
+必要なproposal-scoped budgetは人間が決めます。accepted proposalの実装が完了すると、同じPRで
+`accepted`から`done`へ閉じます。
+
+```bash
+aro proposals check --repo . --strict
+```
+
+詳細: [`docs/proposal-loop.md`](./docs/proposal-loop.md)
+
+### Local Improve Loop
+
+配布された`.ai/managed/prompts/improve.md`に従い、cleanな専用branchまたはworktreeで改善を1件実装します。
+PR作成前に`aro guard`と`.ai/project.yaml`のrequired quality gatesを通し、CIで同じ境界を再検証します。
+
+```bash
+DEFAULT_BRANCH=main
+git fetch origin "$DEFAULT_BRANCH"
+BASE_SHA="$(git rev-parse "origin/$DEFAULT_BRANCH")"
+aro guard --repo . --base "$BASE_SHA"
+```
+
+default branchが`main`以外のrepoでは`DEFAULT_BRANCH`を置き換えてください。full SHAを固定することで、
+Proposal budgetの認証とbase driftの検出を同じ基準で扱えます。
+
+人間が明示opt-inしたrepoでは、scheduled local trackとしてaccepted proposalの選定から検証済みDraft PR
+までを委譲する契約も配布されています。ただしscheduler、queue、lease、credential配布などのruntimeは
+このrepoにはまだ実装されていません。
+
+詳細: [`docs/local-improve-loop.md`](./docs/local-improve-loop.md)
+
+### Execution Plan Protocol
+
+`.ai/local/execution-plans/**`に、長期作業の現在stage、次の操作、許可された副作用を記録します。
+現在実装済みなのは、read-onlyの`plans check / status / next`と、promotion・権限拡大を検出する
+`execution_plan_promotion` guardです。Hermes runtime adapterや自動stage promotionは未実装です。
+
+```bash
+aro plans check --repo . --strict
+aro plans status --repo .
+aro plans next --repo . --json
+```
+
+計画と実装境界: [`docs/plans/07-execution-plan-protocol.md`](./docs/plans/07-execution-plan-protocol.md)
+
+## CLI
+
+| Command | 変更 | 役割 |
+|---|---:|---|
+| `aro init` | あり | consumer repoへ初回展開する |
+| `aro diff` | なし | 中央distributionを同期した場合の差分を表示する |
+| `aro sync` | あり | conflictを検査して中央distributionを同期する |
+| `aro doctor` | なし | schema、managed file、workflow、lock、設定を診断する |
+| `aro guard` | なし | merge-baseからHEADまでの変更をproject configとpolicyで検証する |
+| `aro knowledge init` | あり | repo knowledge領域を非上書きで初期化する |
+| `aro knowledge check` | なし | knowledgeの形式、根拠、provenance、鮮度を検証する |
+| `aro proposals check` | なし | proposalの形式、判断記録、根拠の鮮度を検証する |
+| `aro plans check` | なし | execution planのschemaとinvariantを検証する |
+| `aro plans status` | なし | active execution planの現在地を表示する |
+| `aro plans next` | なし | next actionと実行可否を決定的に返す |
+
+各コマンドのoptionは`aro <command> --help`で確認できます。`knowledge`、`proposals`、`plans`は
+subcommandを持つため、たとえば`aro plans next --help`のように実行します。
+
+## 安全境界
+
+- `.ai/managed/**`と`.ai/ai-repo-ops.lock.yaml`は直接編集せず、authoritative distributionを変更して
+  `aro sync`で配布します。
+- `aro guard`はPR側ではなくmerge-base側のproject configとpolicyを読みます。同じPRで検証を緩めて
+  自身の変更を通すことはできません。
+- 正規の`aro sync` bundleは、merge-baseの状態とauthoritative distributionから再現して認証します。
+  lock fileの自己申告は信用しません。
+- KnowledgeとProposalのsourceは、追跡済みのrepo内UTF-8 text fileに限定します。secret、`.git`、`.ai`、
+  dependency、build artifact、symlink、globは拒否します。
+- AI向けの変更範囲や行数上限は、local improve loopではwarningも含めて中止条件です。大型変更は
+  人間承認済みproposal budgetで対象proposalにだけ限定的に拡張できます。
+- proposalの採否、execution planのpromotion、merge、release、deployは自動化しません。
+
+詳細な検証仕様は[`docs/guard.md`](./docs/guard.md)、同期とconflictの仕様は
+[`docs/sync-strategy.md`](./docs/sync-strategy.md)、脅威モデルは[`docs/security.md`](./docs/security.md)を
+参照してください。
 
 ## Development
 
-このリポジトリは pnpm workspace。パッケージマネージャは `packageManager` フィールドで pnpm に固定し、corepack 経由で利用する。
+このrepoはpnpm workspaceです。
 
 ```bash
-# pnpm を有効化（pnpm 未インストール環境ではこの一手が必要）
 corepack enable
-
-pnpm install        # 依存をインストール
-pnpm build          # 全パッケージを tsc でビルド
-pnpm typecheck      # 型検査（テストファイルも含む）
-pnpm test           # vitest
-pnpm aro --help     # aro CLI のヘルプ（事前に pnpm build が必要）
-pnpm schema:sync    # authoritative schemas（project / knowledge）を配布用コピーへ同期
-pnpm schema:check   # 上記2 schemaの差分チェック（CI向け。差分があれば exit 1）
-```
-
-## 使い方（MVP）
-
-対象の Git repo に対して次を実行する（`--source` 省略時は実行モジュール位置から `distribution/` を持つ ai-repo-ops source root を上方探索する）。
-
-`aro` コマンドをグローバルに使えるようにするには（推奨。要: `pnpm setup` 済みで `PNPM_HOME` が PATH にあること）:
-
-```bash
+pnpm install --frozen-lockfile
+pnpm schema:check
+pnpm typecheck
+pnpm test
 pnpm build
-pnpm -C packages/aro-cli link --global   # 以後、任意のディレクトリで aro が使える
 ```
 
-`aro` が PATH にない、または一時的に使うだけなら、global link は不要。中央 repo を一度 build し、
-Node entrypoint を直接実行する。
+| Command | 内容 |
+|---|---|
+| `pnpm schema:sync` | authoritative schemaをdistributionのmanaged copyへ同期する |
+| `pnpm schema:check` | authoritative schemaとmanaged copyの差分を検出する |
+| `pnpm typecheck` | testを含むTypeScriptの型検査 |
+| `pnpm test` | Vitest test suite |
+| `pnpm build` | workspace全体をbuildする |
+| `pnpm release:check` | release前の整合性を検証する |
 
-```bash
-# 初回準備（中央 repo 内）
-cd /path/to/ai-repo-ops
-corepack pnpm install
-corepack pnpm build
+release手順は[`RELEASE.md`](./RELEASE.md)、変更履歴は[`CHANGELOG.md`](./CHANGELOG.md)を参照してください。
 
-# 以後は任意のディレクトリから実行可能
-node /path/to/ai-repo-ops/packages/aro-cli/bin/aro --help
-node /path/to/ai-repo-ops/packages/aro-cli/bin/aro knowledge init \
-  --repo /path/to/your-repo \
-  --base origin/main
-```
+## Documentation
 
-`knowledge init` の成功出力は、実際に使ったNode entrypoint、対象repoの絶対path、検証済みbase SHAを
-後続の `knowledge check` / `guard` とローカルAIへ貼るプロンプトに引き継ぐ。`aro` がPATHになくても、
-別directoryから初期化しても、表示された内容をそのまま使える。
+### 導入・運用
 
-```bash
-aro init --repo /path/to/your-repo     # 初回展開（.ai/ / workflow / lock を生成）
-aro diff --repo /path/to/your-repo     # 中央配布物との差分（実ファイルは変更しない）
-aro sync --repo /path/to/your-repo     # 中央配布物を適用（conflict があれば一切変更せず abort）
-aro doctor --repo /path/to/your-repo   # 対象repoの状態をPASS/WARN/FAILで診断する（読み取り専用）
-aro guard --repo /path/to/your-repo --base main   # base..HEAD の diff を policies で機械検証（読み取り専用）
-aro knowledge init --repo /path/to/your-repo --base origin/main  # merge済み設定を基準にknowledge領域を初期化
-aro knowledge check --repo /path/to/your-repo     # 根拠・provenance・鮮度を検証（読み取り専用）
-aro proposals check --repo /path/to/your-repo     # 提案の形式・採否記録・根拠の鮮度を検証（読み取り専用）
-```
+- [`docs/onboarding.md`](./docs/onboarding.md) — consumer repoへの導入とproject config調整
+- [`docs/local-improve-loop.md`](./docs/local-improve-loop.md) — ローカル改善ループとopt-in track
+- [`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md) — Knowledge Loop
+- [`docs/proposal-loop.md`](./docs/proposal-loop.md) — Proposal Loop
 
-### `aro knowledge`
+### 配布・検証
 
-`.ai/local/knowledge/` に、コード・正式ドキュメントから導いた repo 固有の索引と要約を置く。
-knowledge は正本ではなく、各 entry が正確な source path と検証済み Git commit を持つ。
+- [`docs/distribution.md`](./docs/distribution.md) — manifest、strategy、distribution content hash
+- [`docs/sync-strategy.md`](./docs/sync-strategy.md) — checksum、conflict、atomicity、終了コード
+- [`docs/guard.md`](./docs/guard.md) — guard、proposal budget、promotion guard、CI利用
+- [`docs/security.md`](./docs/security.md) — path safety、symlink、workflow permissions
 
-- `aro knowledge init` は必須の `--base <ref>` と HEAD の merge-base にある許可設定を読み、`index.yaml` と
-  `overview.md` を既存ファイル非上書きで作成する。既存 repo は `--base origin/main`、新規 repo は
-  `aro init` の初期 commit 直後に限り `--base HEAD` を使う。
-- 2ファイルの作成途中で I/O error が起きた場合は、作成済み path と削除対象を表示して exit `3` にする。
-- `aro knowledge check` は通常モードで stale を WARN / exit 0、`--strict` では FAIL / exit 1 にする。
-- 既存 repo は `.ai/project.yaml` に `.ai/local/knowledge/**` を追加する設定専用 PR を先に merge する。
-- source は Git 追跡済み UTF-8 text の正確な相対 path に限定し、secret・`.git`・`.ai`・依存物・
-  build生成物・symlink・glob を拒否する。
-- CI は index のある repo だけ検証し、knowledge を変更する PR では strict にする。AI API・外部network・
-  自動PR / mergeは使わない。
+### 設計・ロードマップ
 
-詳細は [`docs/repo-knowledge-loop.md`](./docs/repo-knowledge-loop.md) を参照。
+- [`docs/plans/README.md`](./docs/plans/README.md) — 開発ロードマップと各計画の位置づけ
+- [`docs/plans/07-execution-plan-protocol.md`](./docs/plans/07-execution-plan-protocol.md) — Execution Plan Protocol
+- [`docs/existing-tools.md`](./docs/existing-tools.md) — Copier / Cruftとの関係と自作する理由
+- [`docs/ai-review.md`](./docs/ai-review.md) — 廃止したCI内AI reviewの実装記録
 
-### `aro proposals check`
+## Status
 
-`.ai/local/proposals/` の提案ファイル（AI が提案し、人間が採否を決める Proposal Loop の記録）を
-機械的に検証する。AI・API キー不要・読み取り専用。
-
-- frontmatter の形式（`status` / `decision` / `sources`）と、`open` / `accepted` 提案の根拠の鮮度
-  （`proposed_at_commit` 以降に source が変わっていないか）を検証する。
-- stale は通常モードで WARN / exit 0、`--strict` では FAIL / exit 1 にする。CI は提案を変更する
-  PR を strict で検証する。
-- 終了コード: `0`=FAIL なし / `1`=FAIL あり / `3`=unexpected error。`--json` で機械可読出力。
-
-詳細は [`docs/proposal-loop.md`](./docs/proposal-loop.md) を参照。
-
-### `aro guard`
-
-base と HEAD の diff（merge-base 比較）を `.ai/project.yaml` と適用 policy（`risk_level` に対応する
-`.ai/managed/policies/*.yaml`）で機械的に検証する。AI・API キー不要・読み取り専用。
-
-- 検証ルール（`project.yaml` / policy）は **merge-base 側の revision から読む**ため、PR 内で設定を
-  緩めても迂回できない。`.ai/project.yaml` 自体の変更は `project_config` violation として必ず表面化する。
-- lock変更を含むPRでは、merge-baseの対象fileへ中央distributionのsyncを再実行し、HEADのraw bytes・
-  Git modeと完全一致するbundleだけをtrusted syncとして認証する。認証pathは`managed_file`と
-  `outside_allowed_paths`だけを免除し、forbidden/workflow/project_config/change limitsは維持する。
-- 終了コード: `0`=違反なし / `1`=違反あり / `3`=unexpected error（base に `project.yaml` が無い等）。
-- `--json` で違反一覧を機械可読出力。詳細は [`docs/guard.md`](./docs/guard.md) を参照。
-
-### `aro doctor`
-
-対象 repo が ai-repo-ops に正しく参加できているかを診断する。実ファイルは一切変更しない。
-
-- `.ai/project.yaml` を中央 source の authoritative schema（`schemas/project.schema.json`）で検証する。
-- `.ai/managed/**` の checksum を lock file と突き合わせる。人間による直接編集（conflict）は FAIL、
-  中央 distribution の更新に追従できていない・sync 済みファイルがディスクから消えている状態
-  （`aro sync` で自動解消される drift）は WARN として検出する。
-- lock file にあるが現在の manifest に無い managed file は `orphaned` として WARN する（MVP では自動削除しない）。
-- lock の distribution content hash が中央 source とずれていれば WARN する（seed の配布終了のように
-  実ファイル差分を生まない配布変更でも `aro sync` による lock 更新が必要なことを検出する）。
-- `.github/workflows/ai-review.yml` の存在・reusable workflow 呼び出し・`@main` 参照・`contents:write` permission（`write-all` 省略記法・job-level のpermissionsブロックも含む）をチェックする。
-- 配布終了済みの `.github/workflows/ai-improve.yml`（legacy seed）が残っていれば WARN として手動削除を案内する（`create_only` のため `aro sync` では消えない）。
-- `.gitignore` / `.gitattributes` / `.prettierignore` に必要行が揃っているかを確認する。
-- 終了コード: `0`=FAIL なし / `1`=FAIL あり / `3`=unexpected error（repo path 不正・source 読込失敗など）。
-
-### 更新判定と conflict
-
-- 更新判定は version ではなく canonical checksum を正とする（CRLF / 先頭 BOM だけの差分は conflict にならない）。
-- `.ai/managed/**` は直接編集しない。人間が編集して conflict になった場合は `git restore -- <path>` で戻してから `aro sync` する。
-
-### I/O 失敗時の復旧（重要）
-
-MVP の `aro` は**自前の backup/restore（自動 rollback）を持たない**。書き込み中に I/O エラーが起きた場合は、`touched paths`（既存ファイルへの変更）と新規作成ファイルを表示し、手動復旧を案内する。
-
-- **`aro init` 後は、生成されたファイルを一度 git commit してから次回以降の `aro sync` を実行することを推奨する。** 生成ファイルが未 commit のまま I/O 失敗が起きると、`git restore` では復旧できない（git に元の版が無い）ことがある。
-- 失敗時は `git status` で touched paths を確認し、既存ファイルは `git restore -- <paths>`、部分生成された新規ファイルは削除（`rm -f <paths>`）してから `aro sync` を再実行する。
-
-## Distribution boundary
-
-- **第一級サポートは「中央 repo クローン + `pnpm link --global`」**（[計画 04](./docs/plans/04-packaging.md)）。
-  `bin` は `@ai-repo-ops/aro-cli` にあり（`packages/aro-cli/bin/aro`）、link 経由なら実体が workspace 内に
-  留まるため `distribution/` の上方探索がそのまま機能する（`--source` 不要）。
-- `pnpm -C packages/aro-cli pack` した tarball からのインストールでも `aro` は起動する（依存は
-  aro-cli 側にあるため解決される）。ただし `distribution/` が同梱されないので、`init` / `diff` /
-  `sync` / `doctor` / `knowledge init` / `knowledge check` には
-  **`--source <ai-repo-ops のクローン>` の指定が必須**（未指定時は上方探索の
-  失敗として `--source` の案内つきエラーになる）。この経路は CI の pack smoke test が毎 PR で検証する。
-- ルートパッケージ `ai-repo-ops` は private な workspace ルートで、配布単位ではない。
-  `pnpm aro ...`（repo 内実行）は従来どおり使える。
-- npm public registry への publish は保留（`@ai-repo-ops/aro-cli` は `private: true` のまま。
-  publish に進む場合の distribution content の扱いは fleet の運用実績を見て判断する）。
+配布・同期、guard、Knowledge Loop、Proposal Loop、Execution Plan Protocolのread-only CLIとpromotion guardは
+実装済みです。Execution Plan Protocolのruntime adapter、consumerでの段階的dogfooding、fleet診断と
+rolloutは計画中です。各計画の設計と段階は[`docs/plans/README.md`](./docs/plans/README.md)から参照できます。
