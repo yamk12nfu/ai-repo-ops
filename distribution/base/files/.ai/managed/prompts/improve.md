@@ -92,13 +92,18 @@ scheduled local だけは、後述の専用契約に従います。
    2. **`aro proposals check --repo . --strict`**。collateral stale があれば一覧を開発者へ提示し、開発者が
       premise を `IMPLEMENTATION_SHA` で再確認した提案だけ `proposed_at_commit` を更新して別commitにする。
       AIだけで再確認したことにしない。revalidationが成立しなければ停止する。provenance commit後は
-      そのcommitを含む最終treeに対して手順5を最初から再実行する。
+      `PROVENANCE_SHA="$(git rev-parse HEAD)"` を記録し、そのcommitを含む最終treeに対して手順5を最初から
+      再実行する。`PROVENANCE_SHA`は監査用であり、revalidation・evidence・祖先確認に使う最終実装SHAは
+      常に`IMPLEMENTATION_SHA`とする。
    3. **`aro guard --repo . --base "$BASE_SHA"`**。`severity: warn` も中止条件とする。実装した提案に
       `decision.budget` がある場合は、guard の budget report が `applied` であることも必須とし、
       `not_applicable` / `rejected` は失敗扱いにする。
    4. **`all required quality gates`**: `quality_gates.required` の全 `commands.*` をcommit済みtreeで再実行する。
-6. commit 後の検証失敗を通常の追いcommitで直せる場合は、proposal statusを変更せず修正し、手順5を最初から
-   再実行する。解消できない場合は **implementation commit 後は commit / status を書き戻さない**。local branch、
+6. commit 後の検証失敗を通常の追いcommitで直せる場合は、proposal statusを変更せず修正commitを作り、直後に
+   `IMPLEMENTATION_SHA="$(git rev-parse HEAD)"` へ更新して手順5を最初から再実行する。以前の
+   `PROVENANCE_SHA` を最終実装SHAの代わりに使わない。追いcommitがProposal sourceを変更した場合、
+   collateral revalidationも更新後の`IMPLEMENTATION_SHA`に対してやり直す。
+   解消できない場合は **implementation commit 後は commit / status を書き戻さない**。local branch、
    `IMPLEMENTATION_SHA`、diff、guard・strict・gate出力を blocked evidence として保全し、push しない。
    remote default branch 上のproposalは`accepted`のまま維持される。失敗記録が必要なら、`BASE_SHA`から切った
    別branchでacceptedの提案本文だけへ日時・理由・blocked branchのHEAD SHAを追記し、

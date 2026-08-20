@@ -444,6 +444,15 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(workflow.match(/`aro proposals check --repo \. --strict` を通してから/g)).toHaveLength(2);
     expect(workflow).toContain("Create a merge commit必須、squash/rebase禁止");
     expect(workflow).toContain("`IMPLEMENTATION_SHA`がdefault branchの祖先");
+    const implementationShaAssignment = '`IMPLEMENTATION_SHA="$(git rev-parse HEAD)"`';
+    const initialImplementationSha = workflow.indexOf(implementationShaAssignment);
+    const followUpCommit = workflow.indexOf("通常の追いcommit");
+    const refreshedImplementationSha = workflow.indexOf(implementationShaAssignment, initialImplementationSha + 1);
+    expect(initialImplementationSha).toBeGreaterThanOrEqual(0);
+    expect(followUpCommit).toBeGreaterThan(initialImplementationSha);
+    expect(refreshedImplementationSha).toBeGreaterThan(followUpCommit);
+    expect(workflow).toContain('`PROVENANCE_SHA="$(git rev-parse HEAD)"`');
+    expect(workflow).toContain("`PROVENANCE_SHA` を最終実装SHAの代わりに使わない");
   });
 
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
