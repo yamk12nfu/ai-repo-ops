@@ -2,7 +2,7 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://github.com/yamk12nfu/ai-repo-ops/schemas/proposal.schema.json",
   "title": "ai-repo-ops proposal frontmatter",
-  "description": "対象repoの .ai/local/proposals/*.md のYAML frontmatterを検証するauthoritative schema。本文はMarkdown、frontmatterは採否の状態と根拠だけを保持する。decision.by / decision.reason のstatus連動の非空必須はallOfで表現する（source重複などの意味検証はCLI側のzodが担う）。",
+  "description": "対象repoの .ai/local/proposals/*.md のYAML frontmatterを検証するauthoritative schema。本文はMarkdown、frontmatterは採否の状態と根拠だけを保持する。decision.by / decision.reason のstatus連動の非空必須と、accepted / doneだけに許可するdecision.budgetはallOfで表現する（source重複などの意味検証はCLI側のzodが担う）。",
   "type": "object",
   "required": ["schema_version", "id", "status", "proposed_at_commit", "sources"],
   "additionalProperties": false,
@@ -45,6 +45,30 @@
         },
         "reason": {
           "type": "string"
+        },
+        "budget": {
+          "type": "object",
+          "required": ["reason"],
+          "additionalProperties": false,
+          "properties": {
+            "max_changed_files": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_added_lines": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reason": {
+              "type": "string",
+              "minLength": 1,
+              "pattern": "\\S"
+            }
+          },
+          "anyOf": [
+            { "required": ["max_changed_files"] },
+            { "required": ["max_added_lines"] }
+          ]
         }
       }
     }
@@ -94,6 +118,23 @@
                 "pattern": "\\S"
               }
             }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["decision"],
+        "properties": {
+          "decision": {
+            "required": ["budget"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "enum": ["accepted", "done"]
           }
         }
       }
