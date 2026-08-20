@@ -380,6 +380,15 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(prompt).toContain("default branch");
   });
 
+  it("improve promptが認証budgetのeffective limit合成を実装どおり案内する", async () => {
+    const prompt = await readFile(IMPROVE_PROMPT, "utf8");
+    expect(prompt).toContain("budget未認証時のbaseline");
+    expect(prompt).toContain("認証済みbudget");
+    expect(prompt).toContain("policyの`budget_ceiling`");
+    expect(prompt).toContain("ceilingが無い軸はbaselineを超えて緩和しない");
+    expect(prompt).toContain("budgetで省略した軸はbaseline");
+  });
+
   it("scheduled local trackを明示opt-inのローカル限定・排他的な1 proposal runにする", async () => {
     const prompt = await readFile(IMPROVE_PROMPT, "utf8");
     const start = prompt.indexOf("## Scheduled local improve track（明示 opt-in）");
@@ -551,9 +560,9 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("proposal budget contractをdistribution 0.1.12として配布する", async () => {
+  it("effective budget guidanceをdistribution 0.1.13として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.1.12");
+    expect(loaded.manifest.version).toBe("0.1.13");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {

@@ -11,6 +11,11 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Fixed
+
+- Improve promptのProposal budget上限を`aro guard`の実装と整合させ、未認証時のbaseline、認証済みbudgetの
+  軸別合成、policy ceiling、ceiling欠落時のfail-closedを明記（distribution version 0.1.13）。
+
 ## [0.4.2] - 2026-08-20
 
 ### Added
