@@ -17,7 +17,7 @@
 - `.ai/local/proposals/**`: **実行前にすべて読む。** 特に `status: rejected` の `decision.reason`
   は最重要の入力で、却下済みと実質同じ提案を再提出しないこと。
 - `.ai/project.yaml`: `ai.max_changed_files` / `ai.allowed_paths` / `commands`。
-- 提案の種として明示的に使うもの: `aro guard --json` の違反（`severity: warn` を含む）、
+- 提案の種として明示的に使うもの: `aro guard --repo . --base origin/<default branch> --json` の違反（`severity: warn` を含む）、
   `aro doctor` の WARN、lint 警告、コード中の TODO / FIXME、未整備のテスト・ドキュメント。
 - リポジトリの現状（コード・テスト・CI 設定）。
 
