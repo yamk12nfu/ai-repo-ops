@@ -18,6 +18,8 @@ diff」に対して出させ、人間が確認する範囲を最小にするた�
 
 **運用上の注意:** 手順 2 の PR（PR ②）は、手順 1 の PR（PR ①）に原則として stack しない。GitHub の base 自動 retarget は、PR ①の merge 時にその head ブランチを削除した場合に依存する。head ブランチを残すと、両 PR が `MERGED` と表示されても、PR ②の変更が `main` に到達しないことがある。stack が避けられない場合は、PR ①の merge 時に head ブランチを削除し、merge 前後に PR ②の base と `main` の到達関係を明示的に確認する。
 
+PR ②を merge する前に、base が必ず `main` であることを確認する。base が `main` でなければ merge を停止し、base を `main` に retarget して diff を再確認するか、`main` から PR ②を独立して作り直す。
+
 ## 手順 1: `aro init` と初回 commit
 
 ```bash
