@@ -26,6 +26,6 @@ entries:
       - path: docs/distribution.md
   - id: onboarding-stacked-pr-retarget
     document: onboarding-stacked-pr-retarget.md
-    verified_at_commit: 5530a7db590a588e52f9b2cbba6524555039bebc
+    verified_at_commit: 20eb7a53a41ece3da5e22cc6636a94a40b52d97e
     sources:
       - path: docs/onboarding.md

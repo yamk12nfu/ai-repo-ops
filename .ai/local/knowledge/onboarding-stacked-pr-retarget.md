@@ -12,4 +12,5 @@ merge 時にその head ブランチを残した場合、GitHub の base 自動 
 
 原則として PR ①を merge してから、`main` を base に独立した PR ②を作る。stack が避けられない場合は、
 PR ①の merge 時に head ブランチを削除し、PR ②の merge 前後で base と `main` への到達関係を明示的に
-確認する。`MERGED` 表示だけを `main` 反映の証拠にしない。
+確認する。PR ②の merge 前に base が `main` でなければ停止し、base を `main` に retarget して diff を
+再確認するか、`main` から PR ②を独立して作り直す。`MERGED` 表示だけを `main` 反映の証拠にしない。
