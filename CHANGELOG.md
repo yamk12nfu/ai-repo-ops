@@ -11,6 +11,10 @@ Fixed / Security）には無い、このプロジェクトの意図的な拡張�
 
 ## [Unreleased]
 
+### Fixed
+
+- 配布 `propose.md` の `aro guard` 入力例に `--repo . --base origin/<default branch>` を追加し、実行可能な形に統一（distribution version 0.2.1）。
+
 ## [0.4.4] - 2026-08-20
 
 ### Changed

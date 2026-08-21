@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=../../managed/schemas/proposal.schema.json
 schema_version: 1
 id: propose-prompt-guard-command-drift
-status: accepted
+status: done
 decision:
   by: yamk12nfu
 proposed_at_commit: 5ff806272718d999977c9419446d737da6cdc743
