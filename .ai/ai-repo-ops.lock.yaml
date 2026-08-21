@@ -2,9 +2,9 @@ schema_version: 1
 source:
   repository: yamk12nfu/ai-repo-ops
   distribution: base
-  version: 0.2.0
+  version: 0.2.1
   commit: null
-  distribution_content_sha256: 59500ee1e46cddc7e29f310ad3ef0f6bfb8825d8404fc379b9221742e642dac5
+  distribution_content_sha256: 09c5f58a403f889961affc2fe4ef76bcd5976f259f986a38aef751e5a819d8bb
 checksum:
   algorithm: sha256
   mode: canonical_text_lf_utf8bom_strip_v1
@@ -31,7 +31,7 @@ managed_files:
     strategy: managed_overwrite
   - path: .ai/managed/prompts/propose.md
     source: distribution/base/files/.ai/managed/prompts/propose.md
-    installed_sha256: e67442a0fecdc26c376640619a7feb73ddfc9b47638d45479027a5d7be74c8c6
+    installed_sha256: c2cb7a26a7b5b36d51fdb42ef67eec031ea18070d5208b82b28ebc55e3d53d3a
     strategy: managed_overwrite
   - path: .ai/managed/policies/default.yaml
     source: distribution/base/files/.ai/managed/policies/default.yaml
@@ -91,4 +91,4 @@ patches:
       - .ai/managed/
       - .ai/ai-repo-ops.lock.yaml
 created_at: 2026-08-04T17:03:49.003Z
-updated_at: 2026-08-20T08:39:32.334Z
+updated_at: 2026-08-21T04:09:51.478Z
