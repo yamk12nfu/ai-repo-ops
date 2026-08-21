@@ -80,6 +80,16 @@ const IMPROVE_PROMPT = path.join(
 );
 const LOCAL_IMPROVE_LOOP_DOC = path.join(REPO_ROOT, "docs", "local-improve-loop.md");
 const PROPOSAL_LOOP_DOC = path.join(REPO_ROOT, "docs", "proposal-loop.md");
+const PROPOSE_PROMPT = path.join(
+  REPO_ROOT,
+  "distribution",
+  "base",
+  "files",
+  ".ai",
+  "managed",
+  "prompts",
+  "propose.md",
+);
 const ISSUE_FIX_PROMPT = path.join(
   REPO_ROOT,
   "distribution",
@@ -626,9 +636,16 @@ describe("distribution/base（Phase 3 完了条件）", () => {
     expect(proposalLoop).toContain("対話型モードでは引き続き開発者が選ぶ");
   });
 
-  it("committed interactive verification guidanceをdistribution 0.2.0として配布する", async () => {
+  it("committed interactive verification guidanceをdistribution 0.2.1として配布する", async () => {
     const loaded = await loadDistribution(REPO_ROOT, "base");
-    expect(loaded.manifest.version).toBe("0.2.0");
+    expect(loaded.manifest.version).toBe("0.2.1");
+  });
+
+  it("propose promptが実行可能なguard入力例を配布する", async () => {
+    const prompt = await readFile(PROPOSE_PROMPT, "utf8");
+
+    expect(prompt).toContain("`aro guard --repo . --base origin/<default branch> --json`");
+    expect(prompt).not.toContain("`aro guard --json`");
   });
 
   it("issue fix promptがclean worktreeを開始条件にする", async () => {
